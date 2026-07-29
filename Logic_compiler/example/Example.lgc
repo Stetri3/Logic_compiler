@@ -1,0 +1,323 @@
+//FILE DI ESEMPIO DI LINGUAGGIO LOGIC
+//Interpreter di alto livello per C/Clang, mantenendo performance ottimali
+//Commento
+
+//Il preprocessing è simile a c++
+#define preproc_var "Definizione preprocessore __/__
+	riga singola"
+//usare __/__ per andare a capo. Notare che l'inlining lo mantiene comunque una sola riga
+
+#define_m multiline 
+F("Definizione a più righe");
+#ifndef nested_preproc
+#define nested_preproc "esiste il nesting a preprocess, __/__
+	questa viene definita ogni volta che si chiama multiline"
+#endif
+		#enddef //Fine definizione multiline, errore di preprocessing se non viene inclusa
+
+#if false //Dato che ancora non esiste la libreria standard
+		//#if controlla espressioni che il preprocessor può valutare a questo punto
+#include <int> //Inclusione simile a c++
+#include <int::uint8> //Le librerie "fatte bene" possono, anche se bisogna implementarlo, supportare la partial inclusion
+//il compiling va in default a <int> dato che è già incluso, 
+//In questo caso la riga #include <int::uint8> non fa assolutamente niente
+uint8 a;
+#else
+#endif
+
+		//ATTENZIONE! Esiste un metodo migliore dell'inclusione (dumb copy) ovvero l'importazione.
+		// L'importazione porta l'albero logico invece che il codice originale.
+		// Diversamente da c/c++, i file inclusi non possono accedere al contesto attuale (macro invisibili a loro)
+		//Per passare dei parametri a inclusione (che devono essere noti a preproc./immediate compile time) si usa la keyword with subito dopo (prima della endline):
+#import <example> with {
+	SOMEPARAM = "hello world";
+	ANOTHERPARAM = "whatever";
+	#skip
+	THIRDPARAM = someRuntimeVal; //Errore! Non è noto a compile time
+	THIRDPARAM = sizeof(int); //funziona, int è conosciuto a immediate compile time
+	//Immediate qui significa prima di logica interagente, ovvero prima di usare <example>
+}
+//I parametri sono firmati strong, la firma DEVE essere compatibile
+
+//per definire parametri:
+#if false	//In <example>, in qualsiasi punto:
+#param const char* SOMEPARAM = "default value, SEMPRE richiesto, altrimenti non compila";
+#param const char* ANOTHERPARAM = "Notare come la firma sia sempre esplicita";
+
+//i parametri funzionano come variabili constexpr, sono valutate nello scope
+namespace n {
+	#param uint64 THIRDPARAM = 0;
+	THIRDPARAM += 1; //funziona
+}
+THIRDPARAM += 2; //errore, THIRDPARAM non definito, n::THIRDPARAM è il nome corretto
+
+//quando un file è incluso con #include, ma presenta dei param, il preprocessor lo tratta ESATTAMENTE come:
+// #param int PARAM = 2; diventa:
+
+#ifndef PARAM
+constexpr int PARAM = 2;
+#else
+#define __RESERVED__PARAM = PARAM //Le macro __RESERVED__ sono riservate al preproc, errore di parsing se user defined
+#undef PARAM
+constexpr int PARAM = __RESERVED__PARAM; //controllando che __PARAM sia un int ed evitando possibile duplicazione di semicolon
+#undef __PARAM
+#endif
+
+//In questo modo lo stesso file può essere incluso o importato a scelta.
+//Ovviamente import controlla l'esistenza del salvataggio ast mentre include copia il source code
+//ATTENZIONE: Notare come #param "assorba" le macro con include (se definito in uno scope privato)
+//Quindi è aspettato e anche voluto che le macro specifiche per la parametrizzazione spariscano dopo l'inclusione
+//Comunque è good practice definire param in scope globale, e in particolare a inizio file
+//L'utilità di essere scope dependent è per evitare code pollution in altri file
+
+//Per ora assumiamo che i tipi standard siano già stati scritti
+#include <stdvars>
+int a; //Inizializzato a 0
+type t = int; //type è una variabile compile time che definisce un tipo
+t b = 2;
+constexpr int c = -3;
+//A livello semantico non esiste differenza tra un type e una constexpr var
+#if false
+type consttype = constexpr float; 
+//Errore! constexpr è una compiler flag, NON parte del tipo. Non può essere esplicitata su un tipo
+#endif
+constexpr t d = 3; //Tutto bene
+
+//anche se va sempre inizializzata, constexpr non implica const:
+c = -4; //funziona, ma deve essere in un punto valutabile a compile time
+//es. se f è runtime
+#if false
+c = f(-2); //Errore: c è parte del code, non dei dati
+#endif
+
+constexpr const int g = -5;
+
+//giusto per utilità uso #skip, che salta la riga immediatamente successiva
+//#skip \n [riga] = #if false \n [riga] \n #endif
+#skip
+g = -6; //Errore! g è immutabile
+
+#include <stdlists>
+
+array<t> arr1[10]; //lista di int. scrivere array<t,10> ha lo stesso effetto.
+constexpr const array<float> arr2 = { 3,2,14 }; //funzionante finché ogni elemento è convertibile impl a float
+array<type> arr3[4]; //Lista di tipi (inizializzata a void). è sempre constexpr, ma chiamare gli elementi
+//ne copia la firma al momento, NON è associata direttamente. Ovvero:
+arr3[2] = int8;
+arr3[2] e = -2;
+arr3[2] = uint16;
+assert(e == int8(-2)); //true, e non può cambiare una volta definito
+//Assert è un semplice check compile time (lhs, rhs, optional message)
+constexpr uint64 size = 0;
+
+#predef FIX
+//predef NON è una macro, non è una cosa esistente, è solo un modo per mostrare un comportamento di tuple
+//trattatelo come se FIX (definita sotto) fosse invece definita sopra, e chiamata qua
+FIX
+
+constexpr for (i in arr3) {
+	//constexpr sui jump (for, if, while) indica che va eseguito a compile time
+	//ovviamente fallisce se sono presenti runtime evals
+	//NON fallisce se le uniche runtime non sono mai usate a runtime e sono solo da assegnare
+	//In tal caso la default initialization è sovrascritta dal valore 
+	// Più informazioni su questo sotto*
+	//Anche se constexpr non presente, se l'interpreter rileva la possibilità di farlo a compile time ci prova
+	//Ovvero constexpr sui jump è un force, non un advice
+	//Notare come constexpr vada SEMPRE PRIMA dei nomi
+	size += sizeof(i);
+}
+//*esempio constexpr jump con runtime vars
+int h = -1; //runtime var
+int j = -1; //runtime var
+//Assumendo f() strettamente runtime
+int k = f(h);
+
+constexpr if (true) {
+	#skip
+		h = 0; //ERRORE! Undefined behavior, staresti sovrascrivendo a compile time
+			   //Una variabile che dev'essere inizializzata a -1 a runtime
+	j = 0; //Funziona, è un semplice branching int j = true ? 0 : -1 a inizializzazione
+	k = 0; //altamente sconsigliato, inietti f nel codice anche se non serve. Usa un if/else constexpr piuttosto
+}
+
+
+constexpr tuple<size> instances;
+//tuple non ha un inizializzazione default, dato che può ospitare tipi diversi.
+//per cui quando non viene inizializzata a definizione bisogna passarle la memoria richiesta
+constexpr uint64 cursor = 0;
+constexpr for (i = 0; i < arr3.size(); ++i) {
+	//setType dice alla tuple come interpretare lo spazio libero
+	//Errore se si usa su spazio non libero
+	instances.setType(cursor, arr3[i]); //Inizializzato default
+	cursor += sizeof(arr3[i]);
+}
+//Errore!!! void (inizializzazione default di arr3) occupa 0 byte, non può essere istanziato in tuple
+//Sopra va messo il FIX:
+#define_m FIX
+constexpr for (i in arr3) {
+	if (typeof(i) == void)
+		i = uint8;
+}
+#enddef
+//Ricordo che questo non processerebbe, non esiste una macro #predef, va copiato e incollato sopra
+//Questo è solo per motivi didattici
+
+//alternativamente, molto consigliato, si può passare alla tuple direttamente la lista constexpr dei tipi
+constexpr tuple<arr3> wayBetterInstances;
+
+auto runtimeVar = runtimeFunc(2);
+
+template <type T>
+struct Packed {
+	auto a = eval(typeof(T) == int) {
+		return uint8(2);
+	} else eval(typeof(T) == float)
+	{
+		return type(float);
+	} else {
+	uint8 s = sizeof(T);
+	#skip
+		return s * 3; //Non errore, ma ambiguo, con auto serve conversione esplicita
+	return uint32(s * 3);
+	};
+#skip
+	auto b = eval(runtimeVar == 2) { return 1; } else { return 0; };
+	//Errore! eval è constexpr
+};
+#skip
+assert(sizeof(Packed) > 0); //Errore nel parsing: Packed non è completo
+assert(sizeof(Packed<int>) == 1); //True
+assert(sizeof(Packed<uint8>) == 1); //False, 4
+
+namespace spazio {
+	//...
+	//letteralmente identico a c++
+}
+struct Something {
+	auto a = eval(true) return int8(-1); else return int16(-2);
+	//using è simile a define, inline sub ma solo per variabili.
+	using t = int; //Compila senza problemi, compile time variable
+	using b = a; //compila senza problemi, runtime variable da 0 byte (solo un inlining ad a)
+	#skip
+	uint64 dim = sizeof(Something); //Errore! Something non definito!
+	#skip
+	type self = Something; //Errore! Something non definito!
+	//this 
+	static constexpr void lol() { 1++; }
+	void idk = lol; //Funziona perfettamente
+	#skip
+	void idk2 =lol2; //Errore! lol2 non definito
+	static constexpr void lol2();
+	void idk2 = lol2; //compila, ma comunque avrebbe più senso definire totalmente il metodo sopra, giusto per dire
+	static constexpr void lol2() { 1++; }
+	auto c = this.b; 
+	#skip
+	static auto d = this.b; //Errore! this non applicabile in static
+
+};
+#include <stdtypes>
+type EmptyType using void{}; //tipo definito da zero, senza importare flag da altro
+type ExType using EmptyType{}; //tipo che importa le opzioni, ma non i membri, da ExType
+type ExDeriv : EmptyType{}; //importa sia le opzioni che i membri. Ovviamente importare membri senza opzioni non è possibile né voluto
+type SomeElse using std::types::struct{
+	//std::types definirà dei tipi iniziali. In questo caso, questo è lo stesso di definire struct SomeElse{...};
+	//Il tipo struct include opzioni che permettono al tipo di avere membri interni
+	int a;
+	//e utilità come l'instance reference this:
+	int b = this.a * 2;
+};
+
+type Clean{ //non mettere l'inheritance è identico a usare void
+requires:	//dice all'interpreter di cosa ha bisogno il tipo
+	requires "time" : "runtime"; //"runtime" significa che può essere valutato sia a runtime che a compile time
+	requires "structure" : ( //imposta structure/this a 1, structure/members a 1, ecc.
+	"this",
+	"members", //variabili allocabili
+	"static", //Oggetti che non dipendono dall'istanza ma sono ottenuti dal tipo come chiave
+	"methods"); //methods e members(variabili) sono separati per motivi di accesso
+#if false	
+public:
+	static constexpr const char* a = "someflag";
+requires://errore! requires va sempre prima di public o private, per tenere l'ordine typedef corretto
+	requires "flags" : (a); //Infatti, errore! i requires non possono accedere al tipo stesso
+#endif
+	//requires! = requires not, ovvero ha bisogno che non ci siano
+	requires! "alloc" : "heap";
+	#skip
+		requires!"time" : "runtime"; //errore! requires conflicting!
+
+	//Si possono usare compile time expressions come eval() o ternary? per i requires, ad esempio
+	requires (constexpr_var > 0 ? "flags" : "flags_adv") : (constexpr_var < 0 ? "enable_meta_expr" : "no_virtual");
+
+};
+
+
+//MEM MANAGEMENT
+//Delete è supportato
+delete a;
+Something a; //funziona
+//Notare come i costruttori di tipi non trivial vadano esplicitati
+a::lol(); //Compila, lol è static
+a.idk(); //Errore! a non inizializzato!
+//a per ora contiene garbage, la definizione riserva solo la memoria
+//Inizializzazione:
+a(); //Qualsiasi constructor va bene, se non overridato le vuote sono il default
+a.idk(); //compila
+//Oppure anche a definizione
+delete a;
+#skip
+a++; //errore! a non definito
+Something a();
+a.idk(); //compila
+
+//Esiste il memory recasting, ma deve seguire delle regole precise:
+#skip
+array<uint8> arrBig[100] = (delete a); //errore! Violazione di accesso
+array<uint8> arrFit[sizeof(a)] = (delete a); //compila, ora arrFit contiene il garbage che prima costituiva a
+//Notare che arrFit NON è inizializzato, l'inizializzazione funziona allo stesso modo
+//con arrFit(); OPPURE
+array<uint8> arrInit[sizeof(arrFit)] = (delete arrFit)(); //Costruttore a definizione, con ()
+//Il same name casting non è permesso:
+#skip //(sapendo che arrInit è 4 byte)
+int arrInit = (delete arrInit); //errore! arrInit è già un nome riservato
+int middle = (delete arrInit);
+int arrInit = (delete middle)(); //Compila, ma sconsigliato, in genere è meglio non ridefinire nomi nello stesso scope
+
+//reallocazione parziale:
+uint8 firstByte = (delete arrInit)(250);
+//firstByte è il primo byte di arrInit, inizializzato a 250. Gli altri 3 sono disallocati
+
+//usando sintassi legacy, anche new è supportato, ma è giusto per avere un modo per allocare oggetti sull'heap
+int* val = new int(0);
+
+//La sintassi per gli heap pointer è analoga allo stack:
+uint32* newVal = (delete val);
+
+//Gli oggetti sull'heap vanno SEMPRE eliminati
+delete newVal;
+//Il delete si applica SEMPRE ai pointer per l'heap, e SEMPRE ai valori per lo stack:
+uint8 randomByte;
+using byteadd = *randomByte;
+#skip
+delete byteadd; //Questo eliminerebbe il pointer a byteadd, ma non il byte stesso, dato che vive nello stack tramite scope
+
+delete randomByte; //Elimina il byte stesso
+#skip
+delete byteadd; //Errore (chicca): byteadd è un abstract reference, non ha valore runtime
+//se avessimo avuto un pointer tipo uint8* realAdd = *randomByte;
+//Avremmo fatto delete realAdd; per liberare 8 byte del pointer dallo stack, ma sempre non il byte stesso
+//Se si ha solo il pointer, basta deferenziarlo & e poi eliminarlo
+//Ma generalmente se hai solo il pointer di una stack var non dovresti eliminarla in quello scope
+
+//abbiamo un using per un pointer a un oggetto inesistente:
+using! byteadd; //Elimina l'inline alias. Comunque sconsigliato, meglio lasciar morire gli using all'uscita dallo scope
+
+//in generale se non sei sicuro puoi lasciare al compiler il lavoro sporco
+#ifndef WEIRD_MACRO
+#define WEIRD_MACRO //qualcosa di strano che non sei sicuro che memtype abbia
+#endif
+auto unknownMem = WEIRD_MACRO;
+//delete auto elimina ogni allocazione relativa:
+delete auto unknownMem;
+//se unknownMem è uno stack pointer: libera l'indirizzo, poi libera la variabile che contiene il pointer
+//se heap pointer o stack var, fa il delete normale. Se heap ref, converte in pointer e poi fa il delete.
