@@ -3,6 +3,7 @@
 #include <string_view>
 #include "hashing.h"
 
+
 enum class MacroType : uint16_t {
     None,
     Unknown,
@@ -30,7 +31,8 @@ enum class MacroType : uint16_t {
     }
 }
 
-struct PPToken {
+struct MacroDef {
     uint64_t line;
+    
     MacroType type;
 };

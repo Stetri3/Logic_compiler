@@ -16,15 +16,16 @@
 
 class Preprocessor {
     uint64_t cursor = 0;
-    MacroType current_macro = MacroType::None;
-    SourceView source;
-
+    SourceView source; //Main file
+    uint64_t out_cursor; //Cursor per il file preprocessato
     FileManager file_mgr;
     std::vector<char> output_buffer; // Allocazione dinamica sicura e contigua
     std::array<SourceView, 64> loadedCache{};
     uint8_t cacheCounter = 0;
 
-    std::unordered_set<std::string_view> defined_macros;
+    struct Defined {
+
+    };
 
     [[nodiscard]] SourceView loadView(const char* pathrel);
 
