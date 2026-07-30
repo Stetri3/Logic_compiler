@@ -17,20 +17,19 @@
 class Preprocessor {
     uint64_t cursor = 0;
     SourceView source; //Main file
-    uint64_t out_cursor; //Cursor per il file preprocessato
+    uint64_t out_cursor = 0; //Cursor per il file preprocessato
     FileManager file_mgr;
     std::vector<char> output_buffer; // Allocazione dinamica sicura e contigua
-    std::array<SourceView, 64> loadedCache{};
-    uint8_t cacheCounter = 0;
 
-    struct Defined {
-
+    struct Defined {//Explicit name (or other info) of the Macro
+        MacroDef def;
+        uint16_t name; //defName = def.get()[0 - name]
     };
 
-    [[nodiscard]] SourceView loadView(const char* pathrel);
+    [[nodiscard]] SourceView loadView(const char* pathrel); //Loads the code through a file manager
 
     // Helper interni per il parsing
-    void skip_whitespace_and_comments();
+    void ol(); //Overlook, skipping context dependent spacing and comments
     std::string_view next_token();
     std::string_view read_line();
     void process_directive(MacroType type);
