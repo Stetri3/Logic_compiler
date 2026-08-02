@@ -10,7 +10,7 @@ enum class TokenType: uint16_t {
 	//bool
 	kFalse, kTrue,
 	//Control
-	kIf, kElse, kFor, kWhile, kEval,
+	kIf, kElse, kFor, kWhile, kEval, kBreak, kContinue, kReturn,
 	//Env-relative
 	kConstexpr, kConst, kStatic, kInline, kTemplate, //No virtual for now
 	//Env-sectional
@@ -18,22 +18,27 @@ enum class TokenType: uint16_t {
 	//comp op
 	kNew, kDelete, kAuto, kSizeof, kTypeof,
 	//builtin
-	kType, kByte, kVoid, 
+	kType, kByte, kVoid, kStruct, kEnum,
 	//Identifiers
-	UDO, LInt, LString, //UDO = user defined object (variable)
+	Ident, LInt, LFloat, LString, LChar,//Ident = user defined object (variable)
 	//Inline operators (and some access)
-	Plus, Minus, Star, Slash, Amp, Bar, Up, Not, Perc, Question, Equals, Colon,
+	Plus, Minus, Star, Slash, Amp, Bar, Up, Tilde, Excl, Perc, Question, Equals, Colon, Greater, Lesser,
+	//Assignment operators
+	PPlus, MMinus, PlusEquals, MinusEquals, StarEquals, SlashEquals, PercEquals, AmpEquals, BarEquals, TildeEquals, UpEquals,
+	//Double/boolean operators
+	EEquals, NEquals, AAmp, BBar, GrEquals, LeEquals,
+	GGreater, LLesser, GGrEquals, LLeEquals,
+	CColon, SSlash,
 	//Access
-	Dot, Arrow, 
+	Dot, Dots, Arrow, 
 	//Contexting
-	Left, Right, SqLeft, SqRight, BrLeft, BrRight, TrLeft, TrRight, Semi, Comma,
+	Left, Right, SqLeft, SqRight, BrLeft, BrRight, Semi, Comma,
+	WideComment,
 	//Meta
 	Eof, Unknown, External
 };
 struct Token {
-	uint64_t line = 0; //Line of the file in the loaded cache or "line position" in the arena
+	uint32_t globalOffset = 0; //offset in the manager data
+	uint16_t size = 0;
 	TokenType type = TokenType::Unknown;
-	uint16_t filename = 0xFFFF; //index of the file in the loaded cache, or 0 for the arena
-	uint16_t begin = 0; //offset at the line or offset at the cache line
-	uint16_t end = 0;
 };

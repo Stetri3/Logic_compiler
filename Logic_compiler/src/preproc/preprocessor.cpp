@@ -8,7 +8,7 @@
 #include "hashing.h"
 
 SourceView Preprocessor::loadView(const char* pathrel) {
-    return file_mgr.loadFile(pathrel);
+    return file_mgr[file_mgr.loadFile(pathrel)];
 }
 
 void Preprocessor::process() {

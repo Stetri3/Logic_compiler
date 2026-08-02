@@ -1,150 +1,82 @@
-#include "file_manager.h"
-#include <cstring>
 #include <fstream>
-#include <memory>
+#include <cstring>
+#include "file_manager.h"
 
+FileInfo FileManager::loadFile(const char* path) {
+    if (!path) return _NOT_FOUND;
 
-// ==========================================
-// HELPER PRIVATI (I/O e Path Resolution)
-// ==========================================
-
-// Costruisce il path completo (src_path + relative_path) gestendo le slash
-static std::unique_ptr<char[]> build_full_path(const char* base_path, const char* rel_path) {
-    if (!base_path || !*base_path) {
-        size_t len = std::strlen(rel_path) + 1;
-        auto full = std::make_unique<char[]>(len);
-        std::memcpy(full.get(), rel_path, len);
-        return full;
+    std::string_view name_sv(path);
+    FileInfo existing = _findFile(name_sv);
+    if (existing.offset_begin != _NOT_FOUND.offset_begin ||
+        existing.name_size != _NOT_FOUND.name_size ||
+        existing.file_size != _NOT_FOUND.file_size) {
+        return existing;
     }
 
-    size_t base_len = std::strlen(base_path);
-    size_t rel_len = std::strlen(rel_path);
-    bool needs_slash = (base_path[base_len - 1] != '/' && base_path[base_len - 1] != '\\');
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) return _NOT_FOUND;
 
-    size_t total_len = base_len + (needs_slash ? 1 : 0) + rel_len + 1;
-    auto full = std::make_unique<char[]>(total_len);
+    const auto file_sz = file.tellg();
+    if (file_sz < 0) return _NOT_FOUND;
 
-    std::memcpy(full.get(), base_path, base_len);
-    size_t offset = base_len;
-    if (needs_slash) {
-        full[offset++] = '/';
-    }
-    std::memcpy(full.get() + offset, rel_path, rel_len + 1);
-
-    return full;
-}
-
-// Cerca un file per path dentro 'loaded'.
-// data != nullptr distingue qualsiasi file valido (anche vuoto) da uno slot libero.
-static int find_loaded_index(const std::vector<SourceFile>& loaded, const char* path) noexcept {
-    for (size_t i = 0; i < loaded.size(); ++i) {
-        if (loaded[i].data != nullptr && loaded[i].path != nullptr) {
-            if (std::strcmp(loaded[i].path, path) == 0) {
-                return static_cast<int>(i);
-            }
-        }
-    }
-    return -1;
-}
-
-// ==========================================
-// METODI PUBBLICI
-// ==========================================
-
-SourceFile FileManager::pullFile(const char* path) const {
-    auto full_path = build_full_path(src_path, path);
-
-    std::ifstream file(full_path.get(), std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        return SourceFile{ nullptr, nullptr, 0 }; // File non trovato o errore I/O
-    }
-
-    std::streamsize file_size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    if (file_size < 0) {
-        return SourceFile{ nullptr, nullptr, 0 };
-    }
+    const uint32_t name_len = static_cast<uint32_t>(name_sv.size());
+    const uint32_t content_len = static_cast<uint32_t>(file_sz);
+    const uint32_t current_offset = static_cast<uint32_t>(data.size());
 
-    const size_t bytes_to_read = static_cast<size_t>(file_size);
+    // Layout in data: [nome_file][\0][contenuto_file]
+    const size_t total_entry_size = name_len + 1 + content_len;
+    data.resize(current_offset + total_entry_size);
 
-    // Allochiamo sempre (bytes_to_read + 1) per il '\0' finale.
-    // In questo modo anche per un file vuoto (bytes_to_read == 0) data != nullptr!
-    auto buffer = std::make_unique<char[]>(bytes_to_read + 1);
+    char* write_ptr = data.data() + current_offset;
+    std::memcpy(write_ptr, path, name_len);
+    write_ptr[name_len] = '\0';
 
-    if (bytes_to_read > 0) {
-        if (!file.read(buffer.get(), bytes_to_read)) {
-            return SourceFile{ nullptr, nullptr, 0 };
-        }
-    }
+    file.read(write_ptr + name_len + 1, content_len);
 
-    // Null-terminator di sicurezza per Lexer/Preprocessor
-    buffer[bytes_to_read] = '\0';
-
-    return SourceFile{ path, std::move(buffer), bytes_to_read };
+    FileInfo info{ current_offset, name_len, content_len };
+    loaded.push_back(info);
+    return info;
 }
 
-SourceView FileManager::loadFile(const char* path) {
-    // 1. Controlla se è già in memoria
-    int idx = find_loaded_index(loaded, path);
-    if (idx != -1) {
-        return loaded[idx].cref();
+FileInfo FileManager::loadFromView(SourceView view, const char* filename) {
+    if (!filename) return _NOT_FOUND;
+
+    std::string_view name_sv(filename);
+    FileInfo existing = _findFile(name_sv);
+    if (existing.offset_begin != _NOT_FOUND.offset_begin ||
+        existing.name_size != _NOT_FOUND.name_size ||
+        existing.file_size != _NOT_FOUND.file_size) {
+        return existing;
     }
 
-    // 2. Leggi da disco
-    SourceFile sf = pullFile(path);
-    if (sf.data == nullptr) {
-        return SourceView{ nullptr, nullptr, 0 };
+    const uint32_t name_len = static_cast<uint32_t>(name_sv.size());
+    const uint32_t content_len = static_cast<uint32_t>(view.length());
+    const uint32_t current_offset = static_cast<uint32_t>(data.size());
+
+    const size_t total_entry_size = name_len + 1 + content_len;
+    data.resize(current_offset + total_entry_size);
+
+    char* write_ptr = data.data() + current_offset;
+    std::memcpy(write_ptr, filename, name_len);
+    write_ptr[name_len] = '\0';
+
+    if (content_len > 0 && view.get()) {
+        std::memcpy(write_ptr + name_len + 1, view.get(), content_len);
     }
 
-    // 3. Inserisci usando la Free List intrinseca O(1)
-    if (next_free < loaded.size()) {
-        size_t target_slot = next_free;
-
-        // Estrae l'indice del prossimo slot libero memorizzato nel campo 'path'
-        next_free = reinterpret_cast<uintptr_t>(loaded[target_slot].path);
-
-        loaded[target_slot] = std::move(sf);
-        return loaded[target_slot].cref();
-    }
-    else {
-        loaded.push_back(std::move(sf));
-        next_free = loaded.size();
-        return loaded.back().cref();
-    }
+    FileInfo info{ current_offset, name_len, content_len };
+    loaded.push_back(info);
+    return info;
 }
 
-SourceFile FileManager::PopFile(size_t ldIndex) {
-    if (ldIndex >= loaded.size() || loaded[ldIndex].data == nullptr) {
-        return SourceFile{ nullptr, nullptr, 0 };
-    }
+void FileManager::pop() {
+    if (loaded.empty()) return;
 
-    // Sposta l'ownership fuori dal vector
-    SourceFile moved = std::move(loaded[ldIndex]);
+    const FileInfo last = loaded.back();
+    loaded.pop_back();
 
-    // Trasforma lo slot in libero: data torna nullptr e path traccia il vecchio next_free
-    loaded[ldIndex].data = nullptr;
-    loaded[ldIndex].size = 0;
-    loaded[ldIndex].path = reinterpret_cast<const char*>(static_cast<uintptr_t>(next_free));
-
-    next_free = ldIndex;
-
-    return moved;
-}
-
-SourceFile FileManager::PopFile(const char* path) {
-    int idx = find_loaded_index(loaded, path);
-    if (idx != -1) {
-        return PopFile(static_cast<size_t>(idx));
-    }
-
-    // Se non era stato caricato, lo legge da disco e lo ritorna direttamente
-    return pullFile(path);
-}
-
-void FileManager::RmFile(const char* path) {
-    int idx = find_loaded_index(loaded, path);
-    if (idx != -1) {
-        PopFile(static_cast<size_t>(idx));
-    }
+    // Ridimensiona il buffer contiguo per rilasciare l'ultimo elemento
+    data.resize(last.offset_begin);
 }
