@@ -3,7 +3,6 @@
 #pragma once
 #include <cstdint>
 #include <string_view>
-#include <memory>
 
 enum class TokenType: uint16_t {
 	//Keywords:

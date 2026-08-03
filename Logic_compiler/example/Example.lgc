@@ -13,7 +13,7 @@ F("Definizione a più righe");
 #define nested_preproc "esiste il nesting a preprocess, __/__
 	questa viene definita ogni volta che si chiama multiline"
 #endif
-		#enddef //Fine definizione multiline, errore di preprocessing se non viene inclusa
+#enddef //Fine definizione multiline, errore di preprocessing se non viene inclusa
 
 #if false //Dato che ancora non esiste la libreria standard
 		//#if controlla espressioni che il preprocessor può valutare a questo punto

@@ -1,144 +1,109 @@
 #include "preprocessor.h"
 
-#include <vector>
-#include <string_view>
-#include <memory>
-#include <cstring>
-#include <stdexcept>
-#include "hashing.h"
-
-SourceView Preprocessor::loadView(const char* pathrel) {
-    return file_mgr[file_mgr.loadFile(pathrel)];
+Snippet Preprocessor::loadView(const char* pathrel)
+{
+	return file_mgr.loadFile(pathrel).content();
 }
 
-void Preprocessor::process() {
-    while (cursor < source.length()) {
-        ol();
+Preprocessor::Defined Preprocessor::findDefined(std::string_view macroName) const
+{
+	if (auto it = storedMacros.find(macroName); it != storedMacros.end()) {
+		return it->second;
+	}
 
-        if (cursor >= source.length()) break;
-
-        std::string_view token = next_token();
-
-        if (!token.empty() && token.front() == '#') {
-            MacroType type = macro_hash_match(token);
-            process_directive(type);
-        }
-        else {
-            // Append payload token directly to contiguous buffer
-            if (!token.empty()) {
-                output_buffer.insert(output_buffer.end(), token.begin(), token.end());
-                out_cursor = output_buffer.size();
-            }
-        }
-    }
+	// Sentinel (flags == 0)
+	return Defined{.flags = 0};
 }
 
-std::string_view Preprocessor::next_token() {
-    const char* data = source.get(); // Assumes source has a raw pointer accessor
-    const uint64_t len = source.length();
+uint32_t Preprocessor::findNext(const char c)
+{
+	uint32_t cur = cursor;
+	while (cur < sourceContent.size) {
+		if (file_mgr.getChar(sourceContent, cur) == c) {
+			return cur;
+		}
+		++cur; //Default check for current char too, do ++cursor and then findNext() if want to avoid current char check
 
-    if (cursor >= len) {
-        return {};
-    }
-
-    const uint64_t start = cursor;
-    const char c = data[cursor];
-
-    // 1. Directive symbol
-    if (c == '#') {
-        ++cursor;
-        return std::string_view(data + start, 1);
-    }
-
-    // 2. Identifiers / Keywords / Directives names (e.g. "define", "my_var_1")
-    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
-        while (cursor < len) {
-            const char ch = data[cursor];
-            if ((ch >= 'a' && ch <= 'z') ||
-                (ch >= 'A' && ch <= 'Z') ||
-                (ch >= '0' && ch <= '9') ||
-                ch == '_') {
-                ++cursor;
-            }
-            else {
-                break;
-            }
-        }
-        return std::string_view(data + start, cursor - start);
-    }
-
-    // 3. String / Character literals (handles escaped quotes)
-    if (c == '"' || c == '\'') {
-        const char quote = c;
-        ++cursor; // Consume opening quote
-
-        while (cursor < len) {
-            if (data[cursor] == '\\' && (cursor + 1) < len) {
-                cursor += 2; // Skip escaped character
-            }
-            else if (data[cursor] == quote) {
-                ++cursor; // Consume closing quote
-                break;
-            }
-            else {
-                ++cursor;
-            }
-        }
-        return std::string_view(data + start, cursor - start);
-    }
-
-    // 4. Numeric literals
-    if (c >= '0' && c <= '9') {
-        while (cursor < len) {
-            const char ch = data[cursor];
-            if ((ch >= '0' && ch <= '9') || ch == '.' || ch == 'x' || ch == 'X' ||
-                (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
-                ++cursor;
-            }
-            else {
-                break;
-            }
-        }
-        return std::string_view(data + start, cursor - start);
-    }
-
-    // 5. Punctuation / Single-character operators / Symbol fallback
-    ++cursor;
-    return std::string_view(data + start, 1);
+	}
+	return UINT32_MAX; //Char not found
 }
 
-void Preprocessor::process_directive(MacroType type) {
-    switch (type) {
-    case MacroType::Define: {
-        break;
-    }
-    case MacroType::DefineM: {
-        break;
-    }
-    case MacroType::Enddef: {
-        break;
-    }
-    case MacroType::Include: {
-        break;
-    }
-    case MacroType::If: {
-        break;
-    }
-    case MacroType::Ifndef: {
-        break;
-    }
-    case MacroType::Skip: {
-        break;
-    }
-    case MacroType::Import: {
-        break;
-    }
-    case MacroType::Param: {
-        break;
-    }
-    case MacroType::Unknown:
-    case MacroType::None:
-    default:
-        break;
-    }
+bool Preprocessor::skipToNext(const char to)
+{
+	const uint32_t foundCur = findNext(to);
+	if (foundCur != UINT32_MAX){
+		cursor = foundCur;
+		return true;
+	}
+	//Next not found logic
+	return false;
+}
+
+void Preprocessor::ol()
+{
+
+}
+
+void Preprocessor::process_directive(MacroType type)
+{
+	//called with cursor on the #
+	switch (type)
+	{
+	case MacroType::None:
+		break;
+	case MacroType::Unknown:
+		break;
+	case MacroType::Define:
+		break;
+	case MacroType::DefineM:
+		break;
+	case MacroType::Enddef:
+		break;
+	case MacroType::Include:
+		break;
+	case MacroType::If:
+		break;
+	case MacroType::Ifndef:
+		break;
+	case MacroType::Else:
+		break;
+	case MacroType::Skip:
+		break;
+	case MacroType::Import:
+		break;
+	case MacroType::Param:
+		break;
+	default:
+		break;
+	}
+}
+
+bool Preprocessor::evalCondition()
+{
+	if (currActive == MacroType::Ifndef) {
+
+	}
+	return false;
+}
+
+void Preprocessor::process()
+{
+	while (cursor < sourceContent.size) {
+		ol();
+
+		if (currChar() == '#') {
+			const uint32_t mEnd = findNext(' ');
+			if (mEnd == UINT32_MAX) {
+				//Error! bad preprocessor code
+				//here we break everything and clear compilation
+				return;
+			}
+			const uint8_t l = static_cast<uint8_t>(mEnd - cursor + 1u);
+			MacroType thisMacro = macro_hash_match(file_mgr.read(sourceContent, cursor, l));
+			cursor += l;
+			process_directive(thisMacro);
+		}
+		//copy stuff into output
+	}
+	
 }

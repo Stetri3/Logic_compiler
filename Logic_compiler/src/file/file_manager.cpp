@@ -40,7 +40,7 @@ FileInfo FileManager::loadFile(const char* path) {
     return info;
 }
 
-FileInfo FileManager::loadFromView(SourceView view, const char* filename) {
+FileInfo FileManager::loadFromView(std::string_view view, const char* filename) {
     if (!filename) return _NOT_FOUND;
 
     std::string_view name_sv(filename);
@@ -62,8 +62,8 @@ FileInfo FileManager::loadFromView(SourceView view, const char* filename) {
     std::memcpy(write_ptr, filename, name_len);
     write_ptr[name_len] = '\0';
 
-    if (content_len > 0 && view.get()) {
-        std::memcpy(write_ptr + name_len + 1, view.get(), content_len);
+    if (content_len > 0 && view.data()) {
+        std::memcpy(write_ptr + name_len + 1, view.data(), content_len);
     }
 
     FileInfo info{ current_offset, name_len, content_len };

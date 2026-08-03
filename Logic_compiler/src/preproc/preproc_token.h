@@ -14,6 +14,7 @@ enum class MacroType : uint8_t {
     Include,
     If,
     Ifndef,
+    Else,
     Skip,
     Import,
     Param,
@@ -26,6 +27,7 @@ enum class MacroType : uint8_t {
     case "#enddef"_h:   return MacroType::Enddef;
     case "#if"_h:       return MacroType::If;
     case "#ifndef"_h:   return MacroType::Ifndef;
+    case "#else"_h:     return MacroType::Else;
     case "#include"_h:  return MacroType::Include;
     case "#skip"_h:     return MacroType::Skip;
     case "#import"_h:   return MacroType::Import;
