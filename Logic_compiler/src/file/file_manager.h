@@ -30,7 +30,7 @@ class FileManager {
 	
 	FileInfo _findFile(std::string_view name) const {
 		if (!name.data() || name == _EMPTY_SV) return _NOT_FOUND;
-		for (auto i : loaded) {
+		for (const auto& i : loaded) {
 			if (name == _getName(i))
 				return i;
 		}
@@ -38,7 +38,7 @@ class FileManager {
 	}
 
 public:
-	FileManager(const char* base_path) : src_path(base_path) { data.reserve(1024 * 1024 * 1024); }
+	FileManager(const char* base_path) : src_path(base_path) { data.reserve(1024 * 1024 * 4); }
 	FileInfo loadFile(const char* path); //loads in data (if not already loaded), returns indexing
 	FileInfo loadFromView(std::string_view view, const char* filename);
 	void pop(); //flushes last
@@ -50,19 +50,19 @@ public:
 			found.name_size == _NOT_FOUND.name_size);
 	}
 	
-	std::string_view getName(FileInfo info) { return _getName(info); }
+	inline std::string_view getName(FileInfo info) const { return _getName(info); }
 
 
 
-	std::string_view read(uint32_t global_offset, uint32_t size) const {//global
+	inline std::string_view read(uint32_t global_offset, uint32_t size) const {//global
 		return std::string_view(data.data() + global_offset, size);
 	}
 
-	std::string_view read(FileInfo file, uint32_t local_offset, uint32_t size) const {//local (file relative)
+	inline std::string_view read(FileInfo file, uint32_t local_offset, uint32_t size) const {//local (file relative)
 		return read(file.offset_begin + local_offset, size);
 	}
 	
-	std::string_view read(Snippet content, uint32_t local_offset, uint32_t size) const {//local (file relative)
+	inline std::string_view read(Snippet content, uint32_t local_offset, uint32_t size) const {//local (file relative)
 		return read(content.offset + local_offset, size);
 	}
 
