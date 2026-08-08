@@ -18,6 +18,30 @@ PCursor Preprocessor::findInLine(std::string_view sequence) const
 	return static_cast<PCursor>(cursor() + nextC);
 }
 
+PCursor Preprocessor::findPrev(const char c) const
+{ //returns a cursor (so a sourceContent relative value)
+	PCursor cur = cursor();
+	while (cur > 0) {
+		--cur; // Decrement first to move backwards from current position
+		if (file_mgr.getChar(sourceContent(), cur) == c) {
+			return cur;
+		}
+	}
+	return PCursorMax; //Char not found
+}
+
+Snippet Preprocessor::readToNext(std::initializer_list<char> cs)
+{
+	//EXCLUDING CHARACTER c (same in other similar helpers)
+	//TODO: optimize for constexpr and static
+	const PCursor nextC = findNext(cs);
+	if (nextC == PCursorMax)
+		return SNIPPET_SENT;
+	const PCursor oldCursor = cursor();
+	cursor() = nextC;
+	return from(oldCursor);
+}
+
 Preprocessor::Defined Preprocessor::findDefined(std::string_view macroName) const
 {
 	if (auto it = storedMacros.find(macroName); it != storedMacros.end()) {
@@ -176,39 +200,48 @@ void Preprocessor::ol()
 
 }
 
-void Preprocessor::process_directive(MacroType type)
+void Preprocessor::ol_back()
+{}
+
+int Preprocessor::process_directive(MacroType type)
 {
-	//called with cursor on the #
+	//called with cursor on the char after "#macro [space]"
+	//ex. "#macro something" cursor is on s
 	switch (type)
 	{
 	case MacroType::None:
-		break;
+		return handle_none();
 	case MacroType::Unknown:
-		break;
+		return handle_unknown();
 	case MacroType::Define:
-		break;
+		return handle_define();
 	case MacroType::Define_M:
-		break;
+		return handle_define_m();
 	case MacroType::Include:
-		break;
+		return handle_include();
 	case MacroType::If:
-		break;
+		return handle_if();
 	case MacroType::Ifndef:
-		break;
+		return handle_ifndef();
 	case MacroType::Else:
-		break;
+		return handle_else();
+	case MacroType::Elif:
+		return handle_elif();
+	case MacroType::Endif:
+		return handle_endif();
 	case MacroType::Skip:
-		break;
+		return handle_skip();
 	case MacroType::Import:
-		break;
+		return handle_import();
 	case MacroType::Param:
-		break;
+		return handle_param();
 	default:
 		break;
 	}
+	return -1;
 }
 
-bool Preprocessor::evalCondition()
+int Preprocessor::evalCondition(Snippet cond)
 {
 	if (currActive == MacroType::Ifndef) {
 		//logic to get the name and check;
@@ -216,11 +249,131 @@ bool Preprocessor::evalCondition()
 	return false;
 }
 
+int Preprocessor::skip_if_branch()
+{
+	//process() by default always works on active branches only.
+	//This gets called when a branch is false
+	//skips to the nearest #else or #elif
+	//treats #else as #if true (restart execution, nothing happened)
+	//#elif [condition] as #if condition
+
+	bool stringed2 = false; //"#" or '#' is NOT macro stuff
+	bool stringed1 = false;
+	auto stringed = [&]() { return stringed1 || stringed2; };
+	uint16_t nestCount = 1;
+
+	//called when getting out of the branch (cursor on the first space or \n after the macro name)
+	auto end_branching = [&]() {
+		const PCursor endLine = findNext('\n');
+		if (endLine == PCursorMax)
+		{
+			//Lets process() handle end of file
+			cursor() = sourceContent().size;
+			return 422;
+		}
+		cursor() = endLine;
+		return 0;
+	};
+
+	while (nestCount > 0) {
+		//by default the cursor is always at the end of the macro line here (for checking optimizations)
+		//Or wherever in non macro lines
+		if  (sourceContent().size < cursor() + 5) [[unlikely]]  {
+			//A few chars of padding just to keep it clean (an #endif is at least 6 extra chars)
+			// 
+			//error, file done but branching incomplete
+			return -422;
+		}
+		++cursor();
+
+		const char currInitial = currChar();
+
+		if (currInitial == '\"') {
+			stringed2 = !stringed2;
+			continue;
+		}
+		if (currInitial == '\'') {
+			stringed1 = !stringed1;
+			continue;
+		}
+
+		if (stringed()) continue;
+
+		if (currInitial == '#') {
+			const Snippet nameSnippet = readToNext({ ' ', '\n' });
+			if (nameSnippet == SNIPPET_SENT) {
+				//Error! bad preprocessor code
+				//here we break everything and clear compilation
+				return -400;
+			}
+			const std::string_view macroName = file_mgr[nameSnippet];
+			switch (macro_hash_match(macroName))
+			{
+			case MacroType::If:
+			case MacroType::Ifndef:
+				++nestCount;
+				break;
+			case MacroType::Define:
+				const PCursor endLine = findNext('\n');
+				if (endLine == PCursorMax) [[unlikely]] {
+					//error, last line
+					return -422;
+				}
+				cursor() = endLine;
+				break;
+			case MacroType::Define_M:
+				//todo: implementation
+				//It's hard to implement and basically always useless so let's estabilish
+				//no #macros allowed in definitions (inert)
+				break;
+			case MacroType::Skip:
+				//command order is usually top down, but skip is the dumbest most commanding macro ever
+				//ALWAYS removes the line immediately below it, no exceptions no nesting
+				const PCursor endLine1 = findNext('\n');
+				if (endLine1 == PCursorMax || endLine1 + 1 >= sourceContent().size) [[unlikely]]  {
+					//error, last line/skip on last line
+					return -422;
+				}
+				cursor() = endLine1 + 1;
+				const PCursor endLine2 = findNext('\n');
+				if (endLine2 == PCursorMax) [[unlikely]] {
+					//error, last line
+					return -422;
+				}
+				cursor() = endLine2;
+				break;
+			case MacroType::Elif:
+				if (nestCount == 1) {
+					return 105102; //branching ended with new branching
+				}
+
+				break;
+			case MacroType::Else:
+				if (nestCount == 1) {
+					const int retVal = end_branching();
+					return retVal ? retVal : 1; //branching ended with inversion (1 or 422 (eof))
+				}
+				break;
+			case MacroType::Endif:
+				if (nestCount == 1) {
+					return end_branching();
+					 //branching ended (0 or 422 (eof))
+				}
+				--nestCount;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+}
+
 int Preprocessor::handle_define()
 {
 	//strict parsing rules, #define [name] [content] \n anything else yields error
 	//only exception is __/__, (next line) though definition calls parse to single line only
 	// ... __/__ \n [tabbing ...] == ... [space] ...
+	//for now minimal version, TODO(Much later): Implement syntax checking (better here than at calls)
 	ol();
 	const Snippet defName = readToNext(' ');
 	const std::string_view nameStr = file_mgr[defName];
@@ -251,6 +404,21 @@ int Preprocessor::handle_define()
 			lineEnd = findInLine("__/__");
 		}
 		cursor() = findNext('\n');
+		const Snippet defContent = from(beginning);
+		const Defined def{
+			.content = defContent,
+			.t = MacroType::Define,
+			.flags = 3 //second bit up if it has newline tabbing
+		};
+		if (isDefined(nameStr)) {
+			//Add warning: macro redefinition
+			//default behavior is override from that point forwards (like undef + define)
+			storedMacros[nameStr] = def;
+			return 1; //Fall through, but warning
+		}
+		else {
+			storedMacros.insert({ nameStr, def });
+		}
 	}
 	
 	return 0;
@@ -261,6 +429,93 @@ int Preprocessor::handle_define_m()
 	ol();
 	const Snippet defName = readToNext(' ');
 	const std::string_view nameStr = file_mgr[defName];
+	const PCursor endDef = findNext("#enddef");
+	if (endDef == PCursorMax)
+		return -3; //critical error, -3 for end not found
+	const Snippet defContent = to(endDef); //remember that to() excludes the character (no #)
+
+	const Defined def{
+			.content = defContent,
+			.t = MacroType::Define_M,
+			.flags = 1 //remember 0 is sentinel
+	};
+	if (isDefined(nameStr)) {
+		//Add warning: macro redefinition
+		//default behavior is override from that point forwards (like undef + define)
+		storedMacros[nameStr] = def;
+		return 1; //Fall through, but warning
+	}
+	else {
+		storedMacros.insert({ nameStr, def });
+	}
+	return 0;
+}
+
+int Preprocessor::handle_include()
+{
+	ol(); // Skip whitespace following `#include`
+
+	if (end()) {
+		return -1; // Error: Unexpected end of file after #include
+	}
+
+	const char openChar = currChar();
+	char closeChar = '\0';
+
+	if (openChar == '"') {
+		closeChar = '"';
+	}
+	else if (openChar == '<') {
+		closeChar = '>';
+	}
+	else {
+		return -1; // Error: Expected '"' or '<' after #include
+	}
+
+	// Advance cursor past the opening quote/bracket
+	++cursor();
+
+	// Read the path snippet up to the matching closing character
+	const Snippet pathSnippet = readToNext(closeChar);
+	if (pathSnippet.offset == SNIPPET_SENT.offset) {
+		return -1; // Error: Unterminated include path
+	}
+
+	//for now only local file inclusion (easy to change though)
+
+	// Consume the closing quote/bracket
+	++cursor();
+
+	const std::string_view includePath = file_mgr[pathSnippet];
+
+	// Load the target file's content
+	Snippet includedContent = loadView(includePath.data());
+	if (includedContent.offset == SNIPPET_SENT.offset || includedContent.size == PLengthMax) {
+		return -2; // Error: Include file not found or failed to load
+	}
+
+	// Push new frame onto the stack to process the included file recursively
+	inputStack.push_back(SourceFrame{
+		.content = includedContent,
+		.cursor = 0
+		});
+
+	return 0; // Successfully queued included file on the input stack
+}
+
+int Preprocessor::handle_if()
+{
+	const PCursor beginning = cursor();
+	cursor() = findNext('\n');
+	ol_back();
+	const Snippet rawCond = from(beginning);
+	int res = evalCondition(rawCond);
+	if (res < 0) {
+		//Fatal error (syntax and such), abort
+		return res; 
+	}
+	uint8_t result = static_cast<uint8_t>(res & 3u);
+	branchFlags.push_back(result);
 	return 0;
 }
 
@@ -269,6 +524,18 @@ void Preprocessor::process()
 	while (cursor() < sourceContent().size) {
 		ol();
 
+		
+	}
+	
+}
+
+void Preprocessor::processLayer()
+{
+	int ret = 0;
+	while (cursor() < sourceContent().size)
+	{
+		
+		ol();
 		if (currChar() == '#') {
 			const PCursor mEnd = findNext(' ');
 			if (mEnd == PCursorMax) {
@@ -276,21 +543,11 @@ void Preprocessor::process()
 				//here we break everything and clear compilation
 				return;
 			}
-			const uint8_t l = static_cast<uint8_t>(mEnd - cursor() + 1u); //8 bit length
+			const uint8_t l = static_cast<uint8_t>(mEnd - cursor()); //8 bit length
 			MacroType thisMacro = macro_hash_match(file_mgr.read(sourceContent(), cursor(), l));
-			cursor() += l;
-			process_directive(thisMacro);
+			cursor() += l + 1;
+			ret = process_directive(thisMacro);
 		}
 		//copy stuff into output
-	}
-	
-}
-
-void Preprocessor::processLayer()
-{
-	while (cursor() < sourceContent().size)
-	{
-		ol();
-
 	}
 }

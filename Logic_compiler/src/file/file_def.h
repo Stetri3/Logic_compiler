@@ -5,6 +5,7 @@
 struct Snippet {
 	uint32_t offset;
 	uint32_t size;
+	bool operator==(const Snippet&) const = default;
 };
 struct FileInfo {
 	uint32_t offset_begin;
