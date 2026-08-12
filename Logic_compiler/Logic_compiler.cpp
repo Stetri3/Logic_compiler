@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <iomanip>
 #include "Logic_compiler.h"
 #include "lexer.h"
 #include "parser.h"
@@ -10,41 +11,58 @@
 #define EXAMPLE_PATH  R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
 
 int main() {
-    std::ifstream file(EXAMPLE_PATH R"(testing/ex_alpha_01.lgc)");
-    if (!file.is_open()) {
-        std::cerr << "Impossibile aprire il file ex_alpha_01.lgc!\n";
-        return 1;
-    }
+    // Definisci fino a quale ex_alpha_XX.lgc vuoi arrivare
+    constexpr int MAX_N = 2;
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string sourceCode = buffer.str();
+    for (int i = 1; i <= MAX_N; ++i) {
+        // Formatta il numero a due cifre (01, 02, etc.)
+        std::ostringstream filenameStream;
+        filenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".lgc";
+        std::string filename = filenameStream.str();
 
-    std::cout << "=== RUNNING PARSER ON ex_alpha_01.lgc ===\n\n";
+        std::ostringstream binFilenameStream;
+        binFilenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".bin";
+        std::string binFilename = binFilenameStream.str();
 
-    try {
-        Lexer lexer(sourceCode);
-        Parser parser(lexer, sourceCode);
+        std::string fullPath = std::string(EXAMPLE_PATH) + "testing/" + filename;
 
-        // 1. Parsing dell'intero file
-        ast::ASTTree tree = parser.parseTranslationUnit();
+        std::cout << "==================================================\n";
+        std::cout << "=== RUNNING PARSER ON " << filename << " ===\n";
+        std::cout << "==================================================\n\n";
 
-        std::cout << " Parsing completato senza errori!\n";
-        std::cout << " Nodi AST Generati: " << tree.nodes.size() << "\n\n";
-
-        // 2. Dump dell'AST
-        std::cout << "=== AST STRUCTURE DUMP ===\n";
-        ast::ASTManager::print(tree, sourceCode);
-
-        // 3. Salvataggio su file binario per la cache
-        if (ast::ASTManager::saveToFile(tree, "ex_alpha_01.bin")) {
-            std::cout << "\n AST salvato con successo in 'ex_alpha_01.bin'\n";
+        std::ifstream file(fullPath);
+        if (!file.is_open()) {
+            std::cerr << "Impossibile aprire il file: " << fullPath << "\n\n";
+            continue; // Salta al prossimo se il file non esiste
         }
 
-    }
-    catch (const std::exception& e) {
-        std::cerr << "\n PARSER ERROR: " << e.what() << "\n";
-        return 1;
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string sourceCode = buffer.str();
+
+        try {
+            Lexer lexer(sourceCode);
+            Parser parser(lexer, sourceCode);
+
+            // 1. Parsing dell'intero file
+            ast::ASTTree tree = parser.parseTranslationUnit();
+
+            std::cout << " Parsing completato senza errori!\n";
+            std::cout << " Nodi AST Generati: " << tree.nodes.size() << "\n\n";
+
+            // 2. Dump dell'AST
+            std::cout << "=== AST STRUCTURE DUMP FOR " << filename << " ===\n";
+            ast::ASTManager::print(tree, sourceCode);
+
+            // 3. Salvataggio su file binario per la cache
+            if (ast::ASTManager::saveToFile(tree, binFilename)) {
+                std::cout << "\n AST salvato con successo in '" << binFilename << "'\n\n";
+            }
+
+        }
+        catch (const std::exception& e) {
+            std::cerr << "\n PARSER ERROR in " << filename << ": " << e.what() << "\n\n";
+        }
     }
 
     return 0;

@@ -143,8 +143,8 @@ ast::NodeId Parser::parsePrimaryExpression() {
         return parsePostfixExpression(id);
     }
 
-    // 3. Identifiers
-    if (check(t::TokenType::Ident)) {
+    // 3. User Identifiers & Builtin Base Type Keywords (treated uniformly as IdentifierExpr)
+    if (check(t::TokenType::Ident) || check(t::TokenType::kVoid) || check(t::TokenType::kByte)) {
         Token t = advance();
         ast::NodeId id = tree.createNode(ast::NodeKind::IdentifierExpr, t.globalOffset, t.size);
         tree.get(id).data.literal = { t.type, 0 };
@@ -443,12 +443,53 @@ ast::NodeId Parser::parseVarOrTypeDecl(ast::Qualifiers qual) {
     Token nameTok{};
     bool isTypeKeyword = false;
 
-    // Caso 1: 'type T = int;'
+    // Caso 1: 'type T ...'
     if (check(t::TokenType::kType)) {
         typeOrNameTok = advance(); // Consuma 'type'
         isTypeKeyword = true;
         nameTok = expect(t::TokenType::Ident, "Expected type name after 'type'");
+
+        ast::NodeId baseTypeNode = ast::kNullNode;
+
+        // Check if there is an inheritance/alias specifier: '=', ':', or contextual 'using'
+        if (match(t::TokenType::Equals)) {
+            baseTypeNode = parseExpression(0);
+        }
+        else if (match(t::TokenType::Colon)) {
+            baseTypeNode = parsePrimaryExpression(); // Base type
+        }
+        else if (check(t::TokenType::Ident) && source.substr(peek(0).globalOffset, peek(0).size) == "using") {
+            advance(); // Consume contextual 'using'
+            baseTypeNode = parsePrimaryExpression(); // Base type
+        }
+
+        // Check for optional struct/type body block { ... }
+        ast::NodeId bodyNode = ast::kNullNode;
+        if (check(t::TokenType::BrLeft)) {
+            bodyNode = parseStatement(); // Parses { ... }
+        }
+
+        // Semicolon is optional if followed by a block, required if a single-line alias
+        if (check(t::TokenType::Semi)) {
+            advance();
+        }
+
+        ast::NodeId typeDeclId = tree.createNode(ast::NodeKind::TypeDecl, typeOrNameTok.globalOffset);
+
+        ast::NodeId typeNode = tree.createNode(ast::NodeKind::IdentifierExpr, typeOrNameTok.globalOffset, typeOrNameTok.size);
+        tree.get(typeNode).data.literal = { typeOrNameTok.type, 0 };
+
+        ast::NodeId nameNode = tree.createNode(ast::NodeKind::IdentifierExpr, nameTok.globalOffset, nameTok.size);
+        tree.get(nameNode).data.literal = { nameTok.type, 0 };
+
+        tree.get(typeDeclId).qualifiers = qual;
+
+        // Link base type and optional body node
+        ast::NodeId targetInit = (bodyNode != ast::kNullNode) ? bodyNode : baseTypeNode;
+        tree.get(typeDeclId).data.varDecl = { typeNode, nameNode, targetInit };
+        return typeDeclId;
     }
+
     // Caso 2: 'auto x = ...' oppure 'constexpr auto c = ...'
     else if (qual.isAuto) {
         typeOrNameTok = Token{ 0, 0, 0, 1, t::TokenType::kAuto };
@@ -470,7 +511,7 @@ ast::NodeId Parser::parseVarOrTypeDecl(ast::Qualifiers qual) {
         return parseFunctionDecl(qual, typeOrNameTok, nameTok);
     }
 
-    // Altrimenti è una normale variabile o tipo
+    // Altrimenti è una normale variabile
     ast::NodeId initExpr = ast::kNullNode;
     if (match(t::TokenType::Equals)) {
         initExpr = parseExpression(0);
@@ -478,8 +519,7 @@ ast::NodeId Parser::parseVarOrTypeDecl(ast::Qualifiers qual) {
 
     expect(t::TokenType::Semi, "Expected ';' after declaration");
 
-    ast::NodeKind kind = isTypeKeyword ? ast::NodeKind::TypeDecl : ast::NodeKind::VarDecl;
-    ast::NodeId id = tree.createNode(kind, typeOrNameTok.globalOffset);
+    ast::NodeId id = tree.createNode(ast::NodeKind::VarDecl, typeOrNameTok.globalOffset);
 
     ast::NodeId typeNode = tree.createNode(ast::NodeKind::IdentifierExpr, typeOrNameTok.globalOffset, typeOrNameTok.size);
     tree.get(typeNode).data.literal = { typeOrNameTok.type, 0 };
@@ -531,17 +571,24 @@ ast::NodeId Parser::parseStatement() {
         return delNode;
     }
 
-    // 5. Variable / Type / Function Declarations
+    // 5. Contextual "requires:" clause inside type constraint blocks
+    if (match(t::TokenType::kRequires)) {
+        expect(t::TokenType::Colon, "Expected ':' after 'requires'");
+        ast::NodeId reqExpr = parseExpression(0);
+        if (check(t::TokenType::Semi)) advance();
+        return reqExpr;
+    }
+
+    // 6. Variable / Type / Function Declarations
     // Check if this is explicitly a declaration:
-    // - Has qualifiers or explicit keywords (auto, type, byte)
-    // - OR (Ident Ident) -> e.g. "int x", "Point p", "Counter count"
-    // - OR (Ident '(')   -> e.g. "foo()" if return type was omitted / auto
-    bool isDecl = qual.isAuto || check(t::TokenType::kType) || check(t::TokenType::kByte);
+    // - Has qualifiers or explicit keywords (auto, type, byte, struct)
+    // - OR (Ident Ident) -> e.g. "int x", "float y", "Point p", "Counter count"
+    bool isDecl = qual.isAuto || check(t::TokenType::kType) || check(t::TokenType::kByte) || check(t::TokenType::kStruct);
 
     if (!isDecl && check(t::TokenType::Ident)) {
         t::TokenType nextType = peek(1).type;
         if (nextType == t::TokenType::Ident) {
-            isDecl = true; // Ident Ident -> "Point p" or "int x"
+            isDecl = true; // "Ident Ident" pattern -> "int x", "Scalar weight", etc.
         }
     }
 
@@ -549,11 +596,12 @@ ast::NodeId Parser::parseStatement() {
         return parseVarOrTypeDecl(qual);
     }
 
-    // 6. Otherwise: Expression Statement (e.g. "sum += i;", "p.x = 100;", "globalCount++;")
+    // 7. Otherwise: Expression Statement (e.g. "sum += i;", "p.x = 100;", "globalCount++;")
     ast::NodeId expr = parseExpression(0);
     if (check(t::TokenType::Semi)) advance();
     return expr;
 }
+
 ast::NodeId Parser::parseExpression(int minPrecedence) {
     ast::NodeId lhs = parsePrimaryExpression();
 

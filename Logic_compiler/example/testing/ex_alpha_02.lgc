@@ -1,0 +1,67 @@
+// ============================================================================
+// EX_ALPHA_02.LGC - Advanced Type Definitions & Inheritance Test Suite
+// ============================================================================
+
+// 1. Simple Primitive Type Aliasing (=)
+type Counter = int;
+type Scalar = float;
+
+// 2. Base Type Definitions
+type BaseFlags{
+    bool isPersistent = true;
+    bool isEncrypted = false;
+}
+
+type EmptyType using void{
+    int id = 0;
+}
+
+// 3. Inheritance (:) - Imports both options/flags AND internal members
+type DerivedEntity : BaseFlags{
+    int entityId = 1001;
+    Scalar weight = 75.5f;
+
+    auto updatePosition(Scalar dx, Scalar dy) {
+        return dx + dy;
+    }
+}
+
+// 4. Option/Flag Importing (using) - Imports options/flags WITHOUT internal members
+type IsolatedModule using BaseFlags{
+    // Only imports isPersistent & isEncrypted flags, does NOT inherit BaseFlags members
+    Counter localCounter = 0;
+}
+
+// 5. Fresh Type Definition with Constraint / Require Block
+type SecureVault{
+    requires: isEncrypted == true;
+
+    int vaultCode = 9999;
+
+    auto validateAccess(int inputCode) {
+        if (inputCode == vaultCode) {
+            return true;
+        }
+ else {
+  return false;
+}
+}
+}
+
+// 6. Nested Types & Complex Usage inside a Function
+auto instantiateTypeSystem() {
+    DerivedEntity entity;
+    entity.isPersistent = false; // Inherited from BaseFlags via ':'
+    entity.entityId = 2048;
+
+    IsolatedModule module;
+    module.localCounter = 42;
+
+    SecureVault vault;
+    bool granted = vault.validateAccess(9999);
+
+    if (granted) {
+        return 1;
+    }
+    return 0;
+}
