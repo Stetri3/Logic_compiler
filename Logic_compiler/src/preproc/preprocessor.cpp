@@ -313,7 +313,7 @@ int Preprocessor::skip_if_branch()
 			case MacroType::Ifndef:
 				++nestCount;
 				break;
-			case MacroType::Define:
+			case MacroType::Define: {
 				const PCursor endLine = findNext('\n');
 				if (endLine == PCursorMax) [[unlikely]] {
 					//error, last line
@@ -321,16 +321,17 @@ int Preprocessor::skip_if_branch()
 				}
 				cursor() = endLine;
 				break;
+			}
 			case MacroType::Define_M:
 				//todo: implementation
 				//It's hard to implement and basically always useless so let's estabilish
 				//no #macros allowed in definitions (inert)
 				break;
-			case MacroType::Skip:
+			case MacroType::Skip: {
 				//command order is usually top down, but skip is the dumbest most commanding macro ever
 				//ALWAYS removes the line immediately below it, no exceptions no nesting
 				const PCursor endLine1 = findNext('\n');
-				if (endLine1 == PCursorMax || endLine1 + 1 >= sourceContent().size) [[unlikely]]  {
+				if (endLine1 == PCursorMax || endLine1 + 1 >= sourceContent().size) [[unlikely]] {
 					//error, last line/skip on last line
 					return -422;
 				}
@@ -342,18 +343,20 @@ int Preprocessor::skip_if_branch()
 				}
 				cursor() = endLine2;
 				break;
+			}
 			case MacroType::Elif:
 				if (nestCount == 1) {
 					return 105102; //branching ended with new branching
 				}
 
 				break;
-			case MacroType::Else:
+			case MacroType::Else: {
 				if (nestCount == 1) {
 					const int retVal = end_branching();
 					return retVal ? retVal : 1; //branching ended with inversion (1 or 422 (eof))
 				}
 				break;
+			}
 			case MacroType::Endif:
 				if (nestCount == 1) {
 					return end_branching();
@@ -366,6 +369,7 @@ int Preprocessor::skip_if_branch()
 			}
 		}
 	}
+	return -1;
 }
 
 int Preprocessor::handle_define()
@@ -516,6 +520,41 @@ int Preprocessor::handle_if()
 	}
 	uint8_t result = static_cast<uint8_t>(res & 3u);
 	branchFlags.push_back(result);
+	return 0;
+}
+
+int Preprocessor::handle_ifndef()
+{
+	return 0;
+}
+
+int Preprocessor::handle_else()
+{
+	return 0;
+}
+
+int Preprocessor::handle_elif()
+{
+	return 0;
+}
+
+int Preprocessor::handle_endif()
+{
+	return 0;
+}
+
+int Preprocessor::handle_skip()
+{
+	return 0;
+}
+
+int Preprocessor::handle_import()
+{
+	return 0;
+}
+
+int Preprocessor::handle_param()
+{
 	return 0;
 }
 

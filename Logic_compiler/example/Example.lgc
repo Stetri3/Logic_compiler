@@ -9,10 +9,9 @@
 
 #define_m multiline 
 F("Definizione a più righe");
-#ifndef nested_preproc
 #define nested_preproc "esiste il nesting a preprocess, __/__
 	questa viene definita ogni volta che si chiama multiline"
-#endif
+
 #enddef //Fine definizione multiline, errore di preprocessing se non viene inclusa
 
 #if false //Dato che ancora non esiste la libreria standard
@@ -137,7 +136,8 @@ constexpr if (true) {
 		h = 0; //ERRORE! Undefined behavior, staresti sovrascrivendo a compile time
 			   //Una variabile che dev'essere inizializzata a -1 a runtime
 	j = 0; //Funziona, è un semplice branching int j = true ? 0 : -1 a inizializzazione
-	k = 0; //altamente sconsigliato, inietti f nel codice anche se non serve. Usa un if/else constexpr piuttosto
+	k = 0; //altamente sconsigliato, comportamento inaspettato
+	//il compiler lo ottimizza evitando di chiamare f. Usa un if/else constexpr piuttosto
 }
 
 
@@ -265,8 +265,6 @@ a(); //Qualsiasi constructor va bene, se non overridato le vuote sono il default
 a.idk(); //compila
 //Oppure anche a definizione
 delete a;
-#skip
-a++; //errore! a non definito
 Something a();
 a.idk(); //compila
 

@@ -5,6 +5,7 @@
 #include "file_manager.h"
 #include "Alloc.h"
 #include "Alloc_optimized.h"
+#include "lexer.h"
 
 using namespace std;
 

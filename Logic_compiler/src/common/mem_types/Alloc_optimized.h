@@ -193,28 +193,25 @@ namespace sparse {
         OsPagedVectorImpl(const OsPagedVectorImpl&) = delete;
         OsPagedVectorImpl& operator=(const OsPagedVectorImpl&) = delete;
 
-        // Move Constructor
+        // --- Move Constructor ---
         OsPagedVectorImpl(OsPagedVectorImpl&& other) noexcept
-            : _data(other._data), _size(other._size), _capacity(other._capacity) {
-            other._data = nullptr;
-            other._size = 0;
-            other._capacity = 0;
-        }
+            : _data(std::exchange(other._data, nullptr)),
+            _size(std::exchange(other._size, 0)),
+            _capacity(std::exchange(other._capacity, 0)) {}
 
-        // Move Assignment Operator
+        // --- Move Assignment Operator ---
         OsPagedVectorImpl& operator=(OsPagedVectorImpl&& other) noexcept {
             if (this != &other) {
+                // Liberiamo le risorse correnti
                 if (_data) {
                     _destroy_elements(0, _size);
                     os_mem::release(_data, _maxCap * _el_size);
                 }
-                _data = other._data;
-                _size = other._size;
-                _capacity = other._capacity;
 
-                other._data = nullptr;
-                other._size = 0;
-                other._capacity = 0;
+                // Trasferiamo la ownership da 'other'
+                _data = std::exchange(other._data, nullptr);
+                _size = std::exchange(other._size, 0);
+                _capacity = std::exchange(other._capacity, 0);
             }
             return *this;
         }
