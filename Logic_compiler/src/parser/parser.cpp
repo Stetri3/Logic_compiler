@@ -299,8 +299,7 @@ ast::NodeId Parser::parseExpression(int minPrecedence) {
 
         ast::NodeId binId = tree.createNode(ast::NodeKind::BinaryExpr, opTok.globalOffset);
 
-        char opChar = t::TT_STRMAP[static_cast<size_t>(opTok.type)][0];
-        tree.get(binId).data.binary = { opChar, lhs, rhs };
+        tree.get(binId).data.binary = { opTok.type, lhs, rhs };
 
         lhs = binId;
     }
@@ -311,9 +310,14 @@ ast::NodeId Parser::parseExpression(int minPrecedence) {
 ast::ASTTree Parser::parseTranslationUnit() {
     ast::NodeId root = tree.createNode(ast::NodeKind::TranslationUnit);
 
-    // Loop lazy direttamente sul Lexer gestito via window
     while (!check(t::TokenType::Eof)) {
+        uint32_t prevCursor = window[0].globalOffset;
         parseStatement();
+
+        // Guardrail: se parseStatement non consuma token, interrompi il loop
+        if (window[0].globalOffset == prevCursor && !check(t::TokenType::Eof)) {
+            advance(); // forza l'avanzamento per evitare loop infiniti
+        }
     }
 
     return std::move(tree);

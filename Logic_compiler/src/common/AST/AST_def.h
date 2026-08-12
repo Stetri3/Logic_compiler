@@ -56,8 +56,8 @@ namespace ast {
 
         // Node payload based on NodeKind
         union {
-            struct { char op; NodeId lhs; NodeId rhs; } binary;
-            struct { char op; NodeId operand; } unary;
+            struct { t::TokenType op; NodeId lhs; NodeId rhs; } binary;
+            struct { t::TokenType op; NodeId operand; } unary;
             struct { t::TokenType type; uint32_t tokenIndex; } literal;
             struct { NodeId typeNode; NodeId nameNode; NodeId initExpr; } varDecl;
             struct { NodeId target; NodeId argsList; } call;
@@ -68,9 +68,11 @@ namespace ast {
 
     // Global AST storage container
     struct ASTTree {
-        OsPagedVector<Node> nodes{ 2048 };
+        OsPagedVector<Node> nodes{};
 
-        ASTTree() = default;
+        ASTTree() {
+            nodes.reserve(2048);
+        }
 
         // 1. Explicitly delete copy operations (Virtual memory is non-copyable)
         ASTTree(const ASTTree&) = delete;
