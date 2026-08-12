@@ -1,6 +1,7 @@
 #pragma once
 #include <string_view>
 #include <stdexcept>
+#include <string>
 #include "lexer.h"
 #include "AST_def.h"
 
@@ -10,17 +11,27 @@ private:
     std::string_view source;
     ast::ASTTree tree;
 
-    uint32_t tokenCursor{ 0 };
-    const OsPagedVector<Token>& tokens;
+    // Lookahead window a dimensione fissa per il parsing Lazy
+    static constexpr uint8_t kWindowSize = 2;
+    Token window[kWindowSize]{};
 
-    // Helper utilities
-    const Token& peek(uint32_t offset = 0) const noexcept;
-    const Token& advance() noexcept;
+    // Inizializza la finestra di lookahead consumando dal Lexer
+    void initWindow() noexcept;
+
+    // Helper per l'ispezione e avanzamento Lazy
+    const Token& peek(uint8_t offset = 0) const noexcept;
+    Token advance() noexcept;
     bool check(t::TokenType type) const noexcept;
     bool match(t::TokenType type) noexcept;
     Token expect(t::TokenType type, const char* errorMsg);
 
-    // Parse Qualifiers (constexpr, const, static, etc.)
+    // Diagnostics
+    [[noreturn]] void raiseError(const Token& tok, const std::string& msg) const;
+
+    // Operator precedence mapping (Pratt)
+    int getPrecedence(t::TokenType type) const noexcept;
+
+    // Directives & Qualifiers
     ast::Qualifiers parseQualifiers() noexcept;
 
     // Recursive Descent Grammar Handlers
@@ -29,14 +40,16 @@ private:
     ast::NodeId parseDeleteStatement();
     ast::NodeId parseEvalExpression();
 
-    // Expression Parsing (Pratt / Operator Precedence)
+    // Expression Parsing
     ast::NodeId parseExpression(int minPrecedence = 0);
     ast::NodeId parsePrimaryExpression();
 
 public:
     Parser(Lexer& lex, std::string_view src)
-        : lexer(lex), source(src), tokens(lex.getBufferedTokens()) {}
+        : lexer(lex), source(src) {
+        initWindow();
+    }
 
-    // Driver: parses full unit into the AST
+    // Driver principale
     ast::ASTTree parseTranslationUnit();
 };

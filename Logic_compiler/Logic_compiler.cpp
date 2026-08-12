@@ -1,22 +1,41 @@
-﻿// Logic_compiler.cpp: definisce il punto di ingresso dell'applicazione.
-//
-
+﻿#include <iostream>
+#include <string_view>
 #include "Logic_compiler.h"
-#include "file_manager.h"
-#include "Alloc.h"
-#include "Alloc_optimized.h"
 #include "lexer.h"
+#include "parser.h"
 
-using namespace std;
+// Driver di test
+int main() {
+    constexpr std::string_view source = R"(
+        int a = 42;
+        constexpr const float b = 3.14f;
+        constexpr auto c = a + 10 * 2;
 
-int main()
-{
-	cout << "Hello CMake." << endl;
-	alloc_test();
-	OsPagedVector<int> v(34, -2);
-	v[12] = 254;
-	for (auto i : v) {
-		std::cout << i << "\n";
-	}
-	return 0;
+        type Counter = int;
+        Counter count = 0;
+
+        auto status = eval(a == 42) {
+            byte flag = 1;
+        } else {
+            byte flag = 0;
+        };
+
+        delete a;
+        int reclaimed = (delete count);
+        delete auto status;
+    )";
+
+    try {
+        Lexer lexer(source);
+        Parser parser(lexer, source); // La window consuma lazy i primi 2 token
+
+        ast::ASTTree tree = parser.parseTranslationUnit();
+
+        std::cout << "AST generato con successo! Nodi totali: " << tree.nodes.size() << "\n";
+    }
+    catch (const std::exception& e) {
+        std::cerr << "ERRORE PARSER: " << e.what() << "\n";
+    }
+
+    return 0;
 }
