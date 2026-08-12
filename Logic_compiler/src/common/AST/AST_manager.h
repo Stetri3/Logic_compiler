@@ -24,9 +24,6 @@ namespace ast {
         static void print(const ASTTree& tree, std::string_view source = {});
 
     private:
-        static void dumpNode(const ASTTree& tree, NodeId id, std::string_view source,
-            std::string& out, int depth, bool isLast);
-
         static const char* nodeKindToString(NodeKind kind) noexcept;
     };
 

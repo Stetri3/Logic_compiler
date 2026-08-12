@@ -1,58 +1,50 @@
 ﻿#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include "Logic_compiler.h"
 #include "lexer.h"
 #include "parser.h"
 #include "AST_manager.h"
 
+#define EXAMPLE_PATH  R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
+
 int main() {
-    constexpr std::string_view source = R"(
-        int a = 42;
-        constexpr const float b = 3.14f;
-        constexpr auto c = a + 10 * 2;
+    std::ifstream file(EXAMPLE_PATH R"(testing/ex_alpha_01.lgc)");
+    if (!file.is_open()) {
+        std::cerr << "Impossibile aprire il file ex_alpha_01.lgc!\n";
+        return 1;
+    }
 
-        type Counter = int;
-        Counter count = 0;
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string sourceCode = buffer.str();
 
-        auto status = eval(a == 42) {
-            byte flag = 1;
-        } else {
-            byte flag = 0;
-        };
-
-        delete a;
-        int reclaimed = (delete count);
-        delete auto status;
-    )";
+    std::cout << "=== RUNNING PARSER ON ex_alpha_01.lgc ===\n\n";
 
     try {
-        Lexer lexer(source);
-        Parser parser(lexer, source);
+        Lexer lexer(sourceCode);
+        Parser parser(lexer, sourceCode);
 
-        // 1. Generazione AST dal Parser
+        // 1. Parsing dell'intero file
         ast::ASTTree tree = parser.parseTranslationUnit();
 
-        // 2. Dump leggibile in console con rami e codice sorgente
+        std::cout << " Parsing completato senza errori!\n";
+        std::cout << " Nodi AST Generati: " << tree.nodes.size() << "\n\n";
+
+        // 2. Dump dell'AST
         std::cout << "=== AST STRUCTURE DUMP ===\n";
-        ast::ASTManager::print(tree, source);
+        ast::ASTManager::print(tree, sourceCode);
 
-        // 3. Salva l'AST su file binario
-        if (ast::ASTManager::saveToFile(tree, "ast_cache.bin")) {
-            std::cout << "\nAST salvato con successo in 'ast_cache.bin'\n";
-        }
-
-        // 4. Ricarica l'AST da file binario in una nuova istanza
-        ast::ASTTree loadedTree;
-        if (ast::ASTManager::loadFromFile(loadedTree, "ast_cache.bin")) {
-            std::cout << "AST caricato con successo! Nodi caricati: "
-                << loadedTree.nodes.size() << "\n\n";
-
-            std::cout << "=== LOADED AST DUMP ===\n";
-            ast::ASTManager::print(loadedTree, source);
+        // 3. Salvataggio su file binario per la cache
+        if (ast::ASTManager::saveToFile(tree, "ex_alpha_01.bin")) {
+            std::cout << "\n AST salvato con successo in 'ex_alpha_01.bin'\n";
         }
 
     }
     catch (const std::exception& e) {
-        std::cerr << "ERRORE: " << e.what() << "\n";
+        std::cerr << "\n PARSER ERROR: " << e.what() << "\n";
+        return 1;
     }
 
     return 0;

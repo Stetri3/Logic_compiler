@@ -65,7 +65,12 @@ namespace ast {
         std::string out;
         out.reserve(tree.nodes.size() * 64);
 
-        // Iterazione sequenziale sui nodi memorizzati nel paged vector
+        // Helper lambda per recuperare il nome dell'operatore dal token
+        auto getOpStr = [](t::TokenType type) -> std::string_view {
+            size_t idx = static_cast<size_t>(type);
+            return (idx < static_cast<size_t>(t::TokenType::count)) ? t::TT_STRMAP[idx] : "?";
+            };
+
         for (uint32_t i = 0; i < tree.nodes.size(); ++i) {
             const Node& node = tree.get(i);
 
@@ -92,32 +97,64 @@ namespace ast {
             // Dettagli specifici per tipo di nodo
             switch (node.kind) {
             case NodeKind::BinaryExpr: {
-                // Recupera la rappresentazione stringa dal token index della mappa statica
-                size_t opIdx = static_cast<size_t>(node.data.binary.op);
-                std::string_view opStr = (opIdx < static_cast<size_t>(t::TokenType::count))
-                    ? t::TT_STRMAP[opIdx]
-                    : "?";
-
-                out += " (Op: '" + std::string(opStr) +
+                out += " (Op: '" + std::string(getOpStr(node.data.binary.op)) +
                     "', LHS: " + std::to_string(node.data.binary.lhs) +
                     ", RHS: " + std::to_string(node.data.binary.rhs) + ")";
                 break;
             }
+            case NodeKind::UnaryExpr: {
+                out += " (Op: '" + std::string(getOpStr(node.data.unary.op)) +
+                    "', Operand: " + std::to_string(node.data.unary.operand) + ")";
+                break;
+            }
             case NodeKind::VarDecl:
             case NodeKind::TypeDecl:
+            case NodeKind::FunctionDecl: {
                 out += " (TypeNode: " + std::to_string(node.data.varDecl.typeNode) +
                     ", NameNode: " + std::to_string(node.data.varDecl.nameNode) +
-                    ", InitExpr: " + std::to_string(node.data.varDecl.initExpr) + ")";
+                    ", Init/Body: " + std::to_string(node.data.varDecl.initExpr) + ")";
                 break;
-            case NodeKind::EvalExpr:
+            }
+            case NodeKind::EvalExpr: {
                 out += " (Cond: " + std::to_string(node.data.evalOp.cond) +
-                    ", Then: " + std::to_string(node.data.evalOp.thenBlock) +
-                    ", Else: " + std::to_string(node.data.evalOp.elseBlock) + ")";
+                    ", Then/Body: " + std::to_string(node.data.evalOp.thenBlock) +
+                    ", Else/Init: " + std::to_string(node.data.evalOp.elseBlock) + ")";
                 break;
+            }
+            case NodeKind::CompileTimeJump: {
+                // Se si tratta di un break o continue (memorizzati via data.unary)
+                if (node.data.unary.op == t::TokenType::kBreak || node.data.unary.op == t::TokenType::kContinue) {
+                    out += " (Op: '" + std::string(getOpStr(node.data.unary.op)) + "')";
+                }
+                else { // Se si tratta di un ciclo (for / while, che usa data.evalOp)
+                    out += " (Cond: " + std::to_string(node.data.evalOp.cond) +
+                        ", Then/Body: " + std::to_string(node.data.evalOp.thenBlock) +
+                        ", Else/Init: " + std::to_string(node.data.evalOp.elseBlock) + ")";
+                }
+                break;
+            }
             case NodeKind::DeleteExpr:
-            case NodeKind::CastExpr:
+            case NodeKind::CastExpr: {
                 out += " (Target: " + std::to_string(node.data.deleteOp.target) + ")";
                 break;
+            }
+            case NodeKind::CallExpr: {
+                out += " (Target: " + std::to_string(node.data.call.target) +
+                    ", ArgsList: " + std::to_string(node.data.call.argsList) + ")";
+                break;
+            }
+            case NodeKind::MemberAccessExpr: {
+                out += " (Op: '" + std::string(getOpStr(node.data.binary.op)) +
+                    "', Target: " + std::to_string(node.data.binary.lhs) +
+                    ", Member: " + std::to_string(node.data.binary.rhs) + ")";
+                break;
+            }
+            case NodeKind::StructDecl:
+            case NodeKind::NamespaceDecl: {
+                out += " (NameOffset: " + std::to_string(node.data.call.target) +
+                    ", BodyNode: " + std::to_string(node.data.call.argsList) + ")";
+                break;
+            }
             default:
                 break;
             }

@@ -39,10 +39,19 @@ private:
     ast::NodeId parseVarOrTypeDecl(ast::Qualifiers qual);
     ast::NodeId parseDeleteStatement();
     ast::NodeId parseEvalExpression();
+    ast::NodeId parseIfStatement();
+    ast::NodeId parseWhileStatement();
+    ast::NodeId parseForStatement();
+    ast::NodeId parseReturnStatement();
+    ast::NodeId parseStructDecl();
+    ast::NodeId parseNamespaceDecl();
+    ast::NodeId parseParamDecl();
+    ast::NodeId parseFunctionDecl(ast::Qualifiers qual, Token typeTok, Token nameTok);
 
     // Expression Parsing
     ast::NodeId parseExpression(int minPrecedence = 0);
     ast::NodeId parsePrimaryExpression();
+    ast::NodeId parsePostfixExpression(ast::NodeId expr);
 
 public:
     Parser(Lexer& lex, std::string_view src)

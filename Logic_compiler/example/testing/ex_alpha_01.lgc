@@ -1,0 +1,89 @@
+// ============================================================================
+// EX_ALPHA_01.LGC - Comprehensive Test Suite for LOGIC Language Parser
+// ============================================================================
+
+// 1. Definizioni di Strutture e Tipi Custom
+struct Point {
+    int x = 10;
+    int y = 20;
+}
+
+namespace MathOps {
+    type Scalar = float;
+
+    struct Vector2D {
+        Scalar dx = 0.0f;
+        Scalar dy = 0.0f;
+    }
+}
+
+// 2. Dichiarazioni con Qualificatori e Memory Allocations
+constexpr const float PI = 3.14159f;
+constexpr auto MAX_LIMIT = 100 * 2 + 50;
+
+type Counter = int;
+Counter globalCount = 0;
+
+// 3. Funzioni con Control Flow (if / else, for, while, return)
+auto computeFactorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    else {
+        return n * computeFactorial(n - 1);
+    }
+}
+
+auto runLoopTest() {
+    int sum = 0;
+
+    // Test ciclo for
+    for (int i = 0; i < 10; i++) {
+        if (i == 5) {
+            continue;
+        }
+        sum += i;
+    }
+
+    // Test ciclo while e operatore unario/assegnamento
+    int k = 10;
+    while (k > 0) {
+        sum += --k;
+        if (sum > MAX_LIMIT) {
+            break;
+        }
+    }
+
+    return sum;
+}
+
+// 4. Test Eval Construct, Postfix Expressions & Member Access
+auto executeKernel() {
+    // Istanziazione e Accesso ai membri (Dot operator)
+    Point p;
+    p.x = 100;
+    p.y = p.x * 2;
+
+    // Operatori unari (Bitwise NOT, Logical NOT, Prefix)
+    bool isDone = false;
+    if (!isDone) {
+        globalCount++;
+    }
+
+    // Eval Construct con branching compile-time/runtime
+    auto runtimeState = eval(p.x == 100) {
+        byte activeFlag = 1;
+        return activeFlag;
+    }
+    else {
+        byte activeFlag = 0;
+        return activeFlag;
+    };
+
+    // Memory Management & Recasting
+    delete globalCount;
+    int reclaimedVal = (delete runtimeState);
+    delete auto reclaimedVal;
+
+    return 0;
+}

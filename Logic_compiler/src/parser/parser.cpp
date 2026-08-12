@@ -84,16 +84,24 @@ Token Parser::expect(t::TokenType type, const char* errorMsg) {
 
 int Parser::getPrecedence(t::TokenType type) const noexcept {
     switch (type) {
-    case t::TokenType::BBar:                                return 1;
-    case t::TokenType::AAmp:                                return 2;
-    case t::TokenType::EEquals: case t::TokenType::NEquals: return 3;
-    case t::TokenType::Lesser:  case t::TokenType::Greater:
-    case t::TokenType::LeEquals: case t::TokenType::GrEquals: return 4;
-    case t::TokenType::LLesser: case t::TokenType::GGreater: return 5;
-    case t::TokenType::Plus:   case t::TokenType::Minus:    return 6;
-    case t::TokenType::Star:   case t::TokenType::Slash:
-    case t::TokenType::Perc:                                return 7;
-    default:                                                return 0;
+    case t::TokenType::Equals:
+    case t::TokenType::PlusEquals:  case t::TokenType::MinusEquals:
+    case t::TokenType::StarEquals:  case t::TokenType::SlashEquals:
+    case t::TokenType::PercEquals:  case t::TokenType::AmpEquals:
+    case t::TokenType::BarEquals:   case t::TokenType::UpEquals:  return 1;
+    case t::TokenType::BBar:                                      return 2;
+    case t::TokenType::AAmp:                                      return 3;
+    case t::TokenType::Bar:                                       return 4;
+    case t::TokenType::Up:                                        return 5;
+    case t::TokenType::Amp:                                       return 6;
+    case t::TokenType::EEquals:     case t::TokenType::NEquals:   return 7;
+    case t::TokenType::Lesser:      case t::TokenType::Greater:
+    case t::TokenType::LeEquals:    case t::TokenType::GrEquals:  return 8;
+    case t::TokenType::LLesser:     case t::TokenType::GGreater:  return 9;
+    case t::TokenType::Plus:        case t::TokenType::Minus:     return 10;
+    case t::TokenType::Star:        case t::TokenType::Slash:
+    case t::TokenType::Perc:                                      return 11;
+    default:                                                      return 0;
     }
 }
 
@@ -113,29 +121,42 @@ ast::Qualifiers Parser::parseQualifiers() noexcept {
 ast::NodeId Parser::parsePrimaryExpression() {
     const Token& tok = peek(0);
 
-    // 1. Literals (Int, Float, String, Char)
+    // 1. Operatori Unari Prefissi: ++x, --x, !x, ~x, -x
+    if (check(t::TokenType::PPlus) || check(t::TokenType::MMinus) ||
+        check(t::TokenType::Excl) || check(t::TokenType::Tilde) ||
+        check(t::TokenType::Minus) || check(t::TokenType::Amp) ||
+        check(t::TokenType::Star)) {
+        Token op = advance();
+        ast::NodeId operand = parsePrimaryExpression();
+        ast::NodeId id = tree.createNode(ast::NodeKind::UnaryExpr, op.globalOffset, op.size);
+        tree.get(id).data.unary = { op.type, operand };
+        return parsePostfixExpression(id);
+    }
+
+    // 2. Literals (Int, Float, String, Char, Bool)
     if (check(t::TokenType::LInt) || check(t::TokenType::LFloat) ||
-        check(t::TokenType::LString) || check(t::TokenType::LChar)) {
+        check(t::TokenType::LString) || check(t::TokenType::LChar) ||
+        check(t::TokenType::kTrue) || check(t::TokenType::kFalse)) {
         Token t = advance();
         ast::NodeId id = tree.createNode(ast::NodeKind::LiteralExpr, t.globalOffset, t.size);
         tree.get(id).data.literal = { t.type, 0 };
-        return id;
+        return parsePostfixExpression(id);
     }
 
-    // 2. Identifiers
+    // 3. Identifiers
     if (check(t::TokenType::Ident)) {
         Token t = advance();
         ast::NodeId id = tree.createNode(ast::NodeKind::IdentifierExpr, t.globalOffset, t.size);
         tree.get(id).data.literal = { t.type, 0 };
-        return id;
+        return parsePostfixExpression(id);
     }
 
-    // 3. Eval Construct
+    // 4. Eval Construct
     if (check(t::TokenType::kEval)) {
-        return parseEvalExpression();
+        return parsePostfixExpression(parseEvalExpression());
     }
 
-    // 4. Memory Re-casting / Sub-expression delete: (delete a)
+    // 5. Memory Re-casting / Sub-expression delete: (delete a)
     if (check(t::TokenType::Left) && peek(1).type == t::TokenType::kDelete) {
         advance(); // Consuma '('
         ast::NodeId delNode = parseDeleteStatement();
@@ -143,27 +164,76 @@ ast::NodeId Parser::parsePrimaryExpression() {
 
         ast::NodeId castId = tree.createNode(ast::NodeKind::CastExpr, tok.globalOffset);
         tree.get(castId).data.deleteOp = { delNode };
-        return castId;
+        return parsePostfixExpression(castId);
     }
 
-    // 5. Block Statements usati come espressioni: { ... }
+    // 6. Block Statements usati come espressioni: { ... }
     if (match(t::TokenType::BrLeft)) {
         ast::NodeId blockId = tree.createNode(ast::NodeKind::TranslationUnit, tok.globalOffset);
         while (!check(t::TokenType::BrRight) && !check(t::TokenType::Eof)) {
             parseStatement();
         }
         expect(t::TokenType::BrRight, "Expected '}' at end of block expression");
-        return blockId;
+        return parsePostfixExpression(blockId);
     }
 
-    // 6. Parenthesized Expressions
+    // 7. Parenthesized Expressions
     if (match(t::TokenType::Left)) {
         ast::NodeId expr = parseExpression(0);
         expect(t::TokenType::Right, "Expected ')'");
-        return expr;
+        return parsePostfixExpression(expr);
     }
 
     raiseError(tok, "Unexpected token in expression");
+}
+
+ast::NodeId Parser::parsePostfixExpression(ast::NodeId expr) {
+    while (true) {
+        // Chiamata di funzione: fn(arg1, arg2)
+        if (match(t::TokenType::Left)) {
+            ast::NodeId argsList = ast::kNullNode;
+            if (!check(t::TokenType::Right)) {
+                argsList = parseExpression(0);
+                while (match(t::TokenType::Comma)) {
+                    parseExpression(0);
+                }
+            }
+            expect(t::TokenType::Right, "Expected ')' after call arguments");
+            ast::NodeId callId = tree.createNode(ast::NodeKind::CallExpr, peek(0).globalOffset);
+            tree.get(callId).data.call = { expr, argsList };
+            expr = callId;
+        }
+        // Accesso membri: obj.member o ptr->member
+        else if (check(t::TokenType::Dot) || check(t::TokenType::Arrow)) {
+            Token op = advance();
+            Token member = expect(t::TokenType::Ident, "Expected member name after access operator");
+            ast::NodeId memberNode = tree.createNode(ast::NodeKind::IdentifierExpr, member.globalOffset, member.size);
+            tree.get(memberNode).data.literal = { member.type, 0 };
+
+            ast::NodeId accessId = tree.createNode(ast::NodeKind::MemberAccessExpr, op.globalOffset);
+            tree.get(accessId).data.binary = { op.type, expr, memberNode };
+            expr = accessId;
+        }
+        // Indicizzazione Array: arr[index]
+        else if (match(t::TokenType::SqLeft)) {
+            ast::NodeId indexExpr = parseExpression(0);
+            expect(t::TokenType::SqRight, "Expected ']' after array index");
+            ast::NodeId idxId = tree.createNode(ast::NodeKind::BinaryExpr, peek(0).globalOffset);
+            tree.get(idxId).data.binary = { t::TokenType::SqLeft, expr, indexExpr };
+            expr = idxId;
+        }
+        // Postfix ++ e --
+        else if (check(t::TokenType::PPlus) || check(t::TokenType::MMinus)) {
+            Token op = advance();
+            ast::NodeId postFixId = tree.createNode(ast::NodeKind::UnaryExpr, op.globalOffset);
+            tree.get(postFixId).data.unary = { op.type, expr };
+            expr = postFixId;
+        }
+        else {
+            break;
+        }
+    }
+    return expr;
 }
 
 ast::NodeId Parser::parseEvalExpression() {
@@ -183,6 +253,177 @@ ast::NodeId Parser::parseEvalExpression() {
     ast::NodeId id = tree.createNode(ast::NodeKind::EvalExpr, evalTok.globalOffset);
     tree.get(id).data.evalOp = { cond, thenBlock, elseBlock };
     return id;
+}
+
+ast::NodeId Parser::parseIfStatement() {
+    Token ifTok = expect(t::TokenType::kIf, "Expected 'if'");
+    expect(t::TokenType::Left, "Expected '(' after if");
+    ast::NodeId cond = parseExpression(0);
+    expect(t::TokenType::Right, "Expected ')' after condition");
+
+    ast::NodeId thenBlock = parseStatement();
+    ast::NodeId elseBlock = ast::kNullNode;
+
+    if (match(t::TokenType::kElse)) {
+        elseBlock = parseStatement();
+    }
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::EvalExpr, ifTok.globalOffset);
+    tree.get(id).data.evalOp = { cond, thenBlock, elseBlock };
+    return id;
+}
+
+ast::NodeId Parser::parseWhileStatement() {
+    Token whileTok = expect(t::TokenType::kWhile, "Expected 'while'");
+    expect(t::TokenType::Left, "Expected '(' after while");
+    ast::NodeId cond = parseExpression(0);
+    expect(t::TokenType::Right, "Expected ')' after while condition");
+
+    ast::NodeId body = parseStatement();
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::CompileTimeJump, whileTok.globalOffset);
+    tree.get(id).data.evalOp = { cond, body, ast::kNullNode };
+    return id;
+}
+
+ast::NodeId Parser::parseForStatement() {
+    Token forTok = expect(t::TokenType::kFor, "Expected 'for'");
+    expect(t::TokenType::Left, "Expected '(' after for");
+
+    ast::NodeId init = ast::kNullNode;
+    if (!check(t::TokenType::Semi)) {
+        init = parseStatement();
+    }
+    else {
+        advance();
+    }
+
+    ast::NodeId cond = ast::kNullNode;
+    if (!check(t::TokenType::Semi)) {
+        cond = parseExpression(0);
+    }
+    expect(t::TokenType::Semi, "Expected ';' after for condition");
+
+    ast::NodeId incr = ast::kNullNode;
+    if (!check(t::TokenType::Right)) {
+        incr = parseExpression(0);
+    }
+    expect(t::TokenType::Right, "Expected ')' after for clause");
+
+    ast::NodeId body = parseStatement();
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::CompileTimeJump, forTok.globalOffset);
+    tree.get(id).data.evalOp = { cond, body, init };
+    return id;
+}
+
+ast::NodeId Parser::parseReturnStatement() {
+    Token retTok = expect(t::TokenType::kReturn, "Expected 'return'");
+    ast::NodeId expr = ast::kNullNode;
+    if (!check(t::TokenType::Semi)) {
+        expr = parseExpression(0);
+    }
+    expect(t::TokenType::Semi, "Expected ';' after return value");
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::UnaryExpr, retTok.globalOffset);
+    tree.get(id).data.unary = { t::TokenType::kReturn, expr };
+    return id;
+}
+
+ast::NodeId Parser::parseStructDecl() {
+    Token structTok = expect(t::TokenType::kStruct, "Expected 'struct'");
+    Token nameTok = expect(t::TokenType::Ident, "Expected struct name");
+
+    ast::NodeId body = ast::kNullNode;
+    if (check(t::TokenType::BrLeft)) {
+        body = parseStatement();
+    }
+    if (check(t::TokenType::Semi)) advance();
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::StructDecl, structTok.globalOffset);
+    tree.get(id).data.call = { nameTok.globalOffset, body };
+    return id;
+}
+
+ast::NodeId Parser::parseNamespaceDecl() {
+    Token nsTok = expect(t::TokenType::kNamespace, "Expected 'namespace'");
+    Token nameTok = expect(t::TokenType::Ident, "Expected namespace name");
+    ast::NodeId body = parseStatement();
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::NamespaceDecl, nsTok.globalOffset);
+    tree.get(id).data.call = { nameTok.globalOffset, body };
+    return id;
+}
+
+ast::NodeId Parser::parseParamDecl() {
+    ast::Qualifiers qual = parseQualifiers();
+    Token typeTok{};
+    Token nameTok{};
+
+    if (qual.isAuto) {
+        typeTok = Token{ 0, 0, 0, 1, t::TokenType::kAuto };
+        nameTok = expect(t::TokenType::Ident, "Expected parameter name after 'auto'");
+    }
+    else {
+        typeTok = advance(); // Type specifier (e.g. 'int')
+        if (check(t::TokenType::Ident)) {
+            nameTok = advance(); // Name (e.g. 'n')
+        }
+        else {
+            // Support unnamed parameters e.g. void foo(int)
+            nameTok = Token{ 0, 0, 0, 1, t::TokenType::Unknown };
+        }
+    }
+
+    ast::NodeId initExpr = ast::kNullNode;
+    if (match(t::TokenType::Equals)) {
+        initExpr = parseExpression(0);
+    }
+
+    ast::NodeId id = tree.createNode(ast::NodeKind::VarDecl, typeTok.globalOffset);
+    ast::NodeId typeNode = tree.createNode(ast::NodeKind::IdentifierExpr, typeTok.globalOffset, typeTok.size);
+    tree.get(typeNode).data.literal = { typeTok.type, 0 };
+
+    ast::NodeId nameNode = tree.createNode(ast::NodeKind::IdentifierExpr, nameTok.globalOffset, nameTok.size);
+    tree.get(nameNode).data.literal = { nameTok.type, 0 };
+
+    tree.get(id).qualifiers = qual;
+    tree.get(id).data.varDecl = { typeNode, nameNode, initExpr };
+    return id;
+}
+
+ast::NodeId Parser::parseFunctionDecl(ast::Qualifiers qual, Token typeTok, Token nameTok) {
+    expect(t::TokenType::Left, "Expected '(' after function name");
+
+    // Parse parameter list using parseParamDecl instead of parseVarOrTypeDecl
+    ast::NodeId paramsList = ast::kNullNode;
+    if (!check(t::TokenType::Right)) {
+        paramsList = parseParamDecl();
+        while (match(t::TokenType::Comma)) {
+            parseParamDecl();
+        }
+    }
+    expect(t::TokenType::Right, "Expected ')' after parameters");
+
+    // Function Body { ... }
+    ast::NodeId body = ast::kNullNode;
+    if (check(t::TokenType::BrLeft)) {
+        body = parseStatement();
+    }
+    else {
+        expect(t::TokenType::Semi, "Expected ';' or '{' after function signature");
+    }
+
+    ast::NodeId typeNode = tree.createNode(ast::NodeKind::IdentifierExpr, typeTok.globalOffset, typeTok.size);
+    tree.get(typeNode).data.literal = { typeTok.type, 0 };
+
+    ast::NodeId nameNode = tree.createNode(ast::NodeKind::IdentifierExpr, nameTok.globalOffset, nameTok.size);
+    tree.get(nameNode).data.literal = { nameTok.type, 0 };
+
+    ast::NodeId fnId = tree.createNode(ast::NodeKind::FunctionDecl, nameTok.globalOffset);
+    tree.get(fnId).qualifiers = qual;
+    tree.get(fnId).data.varDecl = { typeNode, nameNode, body };
+    return fnId;
 }
 
 ast::NodeId Parser::parseDeleteStatement() {
@@ -208,23 +449,28 @@ ast::NodeId Parser::parseVarOrTypeDecl(ast::Qualifiers qual) {
         isTypeKeyword = true;
         nameTok = expect(t::TokenType::Ident, "Expected type name after 'type'");
     }
-    // Caso 2: 'auto x = ...' oppure 'constexpr auto c = ...' (il tipo è implicitamente auto)
+    // Caso 2: 'auto x = ...' oppure 'constexpr auto c = ...'
     else if (qual.isAuto) {
-        typeOrNameTok = Token{ 0, 0, 0, 1, t::TokenType::kAuto }; // Sintetico
+        typeOrNameTok = Token{ 0, 0, 0, 1, t::TokenType::kAuto };
         nameTok = expect(t::TokenType::Ident, "Expected variable name after 'auto'");
     }
-    // Caso 3: Dichiarazione standard 'Type name [= expr];' (es. int a = 42; o Counter count = 0;)
+    // Caso 3: Dichiarazione standard 'Type name ...'
     else {
-        typeOrNameTok = advance(); // Consuma il Tipo (es. 'int' o 'Counter')
+        typeOrNameTok = advance();
         if (check(t::TokenType::Ident)) {
-            nameTok = advance();   // Consuma il Nome (es. 'a' o 'count')
+            nameTok = advance();
         }
         else {
-            // Se non c'è un secondo identificatore ma un '=', allora typeOrNameTok era il nome e mancava il tipo
             raiseError(peek(0), "Expected variable name after type specifier");
         }
     }
 
+    // INTERCETTAZIONE FUNZIONI: Se trova '(', si tratta di una dichiarazione/definizione di funzione!
+    if (check(t::TokenType::Left)) {
+        return parseFunctionDecl(qual, typeOrNameTok, nameTok);
+    }
+
+    // Altrimenti è una normale variabile o tipo
     ast::NodeId initExpr = ast::kNullNode;
     if (match(t::TokenType::Equals)) {
         initExpr = parseExpression(0);
@@ -260,29 +506,54 @@ ast::NodeId Parser::parseStatement() {
         return blockId;
     }
 
-    // 2. Delete Statement
+    // 2. Control Flow Constructs
+    if (check(t::TokenType::kIf))       return parseIfStatement();
+    if (check(t::TokenType::kWhile))    return parseWhileStatement();
+    if (check(t::TokenType::kFor))      return parseForStatement();
+    if (check(t::TokenType::kReturn))   return parseReturnStatement();
+    if (check(t::TokenType::kBreak) || check(t::TokenType::kContinue)) {
+        Token ctrlTok = advance();
+        expect(t::TokenType::Semi, "Expected ';' after loop control statement");
+
+        ast::NodeId id = tree.createNode(ast::NodeKind::CompileTimeJump, ctrlTok.globalOffset);
+        tree.get(id).data.unary = { ctrlTok.type, ast::kNullNode };
+        return id;
+    }
+
+    // 3. Structural Declarations
+    if (check(t::TokenType::kStruct))    return parseStructDecl();
+    if (check(t::TokenType::kNamespace)) return parseNamespaceDecl();
+
+    // 4. Memory Delete Statement
     if (check(t::TokenType::kDelete)) {
         ast::NodeId delNode = parseDeleteStatement();
-        if (check(t::TokenType::Semi)) {
-            advance();
-        }
+        if (check(t::TokenType::Semi)) advance();
         return delNode;
     }
 
-    // 3. Variable or Type Declaration (Gestisce anche 'auto' già flaggato nei qualificatori)
-    if (qual.isAuto || check(t::TokenType::Ident) || check(t::TokenType::kType) || check(t::TokenType::kByte)) {
+    // 5. Variable / Type / Function Declarations
+    // Check if this is explicitly a declaration:
+    // - Has qualifiers or explicit keywords (auto, type, byte)
+    // - OR (Ident Ident) -> e.g. "int x", "Point p", "Counter count"
+    // - OR (Ident '(')   -> e.g. "foo()" if return type was omitted / auto
+    bool isDecl = qual.isAuto || check(t::TokenType::kType) || check(t::TokenType::kByte);
+
+    if (!isDecl && check(t::TokenType::Ident)) {
+        t::TokenType nextType = peek(1).type;
+        if (nextType == t::TokenType::Ident) {
+            isDecl = true; // Ident Ident -> "Point p" or "int x"
+        }
+    }
+
+    if (isDecl) {
         return parseVarOrTypeDecl(qual);
     }
 
-    // 4. Expression Statement
+    // 6. Otherwise: Expression Statement (e.g. "sum += i;", "p.x = 100;", "globalCount++;")
     ast::NodeId expr = parseExpression(0);
-
-    if (check(t::TokenType::Semi)) {
-        advance();
-    }
+    if (check(t::TokenType::Semi)) advance();
     return expr;
 }
-
 ast::NodeId Parser::parseExpression(int minPrecedence) {
     ast::NodeId lhs = parsePrimaryExpression();
 
@@ -298,7 +569,6 @@ ast::NodeId Parser::parseExpression(int minPrecedence) {
         ast::NodeId rhs = parseExpression(prec + 1);
 
         ast::NodeId binId = tree.createNode(ast::NodeKind::BinaryExpr, opTok.globalOffset);
-
         tree.get(binId).data.binary = { opTok.type, lhs, rhs };
 
         lhs = binId;
@@ -314,9 +584,9 @@ ast::ASTTree Parser::parseTranslationUnit() {
         uint32_t prevCursor = window[0].globalOffset;
         parseStatement();
 
-        // Guardrail: se parseStatement non consuma token, interrompi il loop
+        // Guardrail per evitare loop infiniti
         if (window[0].globalOffset == prevCursor && !check(t::TokenType::Eof)) {
-            advance(); // forza l'avanzamento per evitare loop infiniti
+            advance();
         }
     }
 
