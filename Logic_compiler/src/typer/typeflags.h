@@ -7,22 +7,13 @@
 #include <memory>
 #include <array>
 #include <string_view>
+#include "std_types.h"
 
 
 namespace typer {
 	//C style flag array (since dimension is dynamic)
-	using FlagArr = std::unique_ptr<uint32_t[]>;
+	using FlagArr = cc::CSpan<uint32_t>;
 
-	inline constexpr size_t flagarrlen(const uint32_t* arr) noexcept {
-		[[unlikely]]  if (!arr) return UINT64_MAX;
-		size_t i = 0;
-		while (arr[i] != UINT32_MAX)
-		{
-			++i;
-		}
-		return i;
-	}
-	inline constexpr size_t flagarrlen(const FlagArr& arr) noexcept { return flagarrlen(arr.get()); }
 
 
 	enum class TypeFlagCode : uint16_t {//type flag keys
@@ -72,8 +63,8 @@ namespace typer {
 			uint8_t bitLen = 0;
 		};
 
-		consteval std::array<TypeFlagInfo, static_cast<size_t>(TypeFlagCode::count)> makeTypeFlagInfo() {
-			std::array<TypeFlagInfo, static_cast<size_t>(TypeFlagCode::count)> ret{};
+		consteval cc::CArray<TypeFlagInfo, static_cast<size_t>(TypeFlagCode::count)> makeTypeFlagInfo() {
+			cc::CArray<TypeFlagInfo, static_cast<size_t>(TypeFlagCode::count)> ret{};
 			using TF = TypeFlagCode;
 
 #define el(code_val, name_str, bit_len) \
@@ -134,13 +125,13 @@ namespace typer {
 		static constexpr uint16_t bitLen = info.bitLen;
 		static constexpr uint16_t wordLen = (bitLen + 16 + 31) / 32; //length in uint32, includes the code
 
-		static constexpr auto getData(const uint32_t* buffer, uint64_t index) {
+		static constexpr auto getData(cc::CSpan<uint32_t> buffer, uint32_t index) {
 			if constexpr (bitLen <= 16) {
 				return static_cast<uint16_t>(buffer[index] & UINT16_MAX);
 			} else if constexpr (bitLen <= 48) {
 				//on good code it should be impossible to have an unfinished array
 				
-				DBAssert(buffer[index + 1] != 0u && "Error! unexpected end of array");
+				DBAssert(buffer.size() > 1 && "Error! unexpected end of array");
 
 				return static_cast<uint64_t>((static_cast<uint64_t>(buffer[index] & UINT16_MAX) << 32)
 					| buffer[index + 1]);
@@ -149,15 +140,9 @@ namespace typer {
 				//If bigger than 48 (aka uint64) returns an owning copy null-term snippet INCLUDING the code
 
 				// Ceiling division: ceil((bitLen + 16) / 32)
-				DBAssert(wordLen + index <= flagarrlen(buffer) && "Error! unexpected end of array");
-				auto arr = std::make_unique<uint32_t[]>(wordLen + 1);
-
-				for (size_t i = 0; i < wordLen; ++i) {
-					arr[i] = buffer[index + i];
-				}
-				arr[wordLen] = 0u;
-
-				return arr;
+				DBAssert(wordLen + index <= buffer.size() && "Error! unexpected end of array");
+				const cc::CSpan dataSpan = buffer.subspan(index, wordLen);
+				return cc::CArray<uint32_t, wordLen>(dataSpan); //makes owning copy of the subspan
 			}
 		}
 	};
