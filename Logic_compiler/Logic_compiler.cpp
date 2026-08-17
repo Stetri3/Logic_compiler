@@ -7,6 +7,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "AST_manager.h"
+#include "compiler.h" // Added LLVM Compiler Header
 
 #define EXAMPLE_PATH  R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
 
@@ -24,10 +25,15 @@ int main() {
         binFilenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".bin";
         std::string binFilename = binFilenameStream.str();
 
+        std::ostringstream irFilenameStream;
+        irFilenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".ll";
+        std::string irFilename = irFilenameStream.str();
+
         std::string fullPath = std::string(EXAMPLE_PATH) + "testing/" + filename;
+        std::string fullIrPath = std::string(EXAMPLE_PATH) + "testing/" + irFilename;
 
         std::cout << "==================================================\n";
-        std::cout << "=== RUNNING PARSER ON " << filename << " ===\n";
+        std::cout << "=== RUNNING PARSER & COMPILER ON " << filename << " ===\n";
         std::cout << "==================================================\n\n";
 
         std::ifstream file(fullPath);
@@ -59,9 +65,29 @@ int main() {
                 std::cout << "\n AST salvato con successo in '" << binFilename << "'\n\n";
             }
 
+            // 4. Generazione LLVM IR
+            std::cout << "=== GENERATING LLVM IR FOR " << filename << " ===\n\n";
+
+            // Instanzia il compilatore usando il nome del file come ID modulo
+            compiler::Compiler llvmCompiler(tree, sourceCode, filename);
+
+            if (llvmCompiler.compile()) {
+                std::cout << "--- LLVM IR OUTPUT ---\n";
+                llvmCompiler.dumpIR();
+                std::cout << "----------------------\n\n";
+
+                // Salva il file .ll nella stessa cartella dei test
+                if (llvmCompiler.emitIRToFile(fullIrPath)) {
+                    std::cout << " LLVM IR salvato con successo in: " << fullIrPath << "\n\n";
+                }
+            }
+            else {
+                std::cerr << " Errore durante la generazione dell'LLVM IR!\n\n";
+            }
+
         }
         catch (const std::exception& e) {
-            std::cerr << "\n PARSER ERROR in " << filename << ": " << e.what() << "\n\n";
+            std::cerr << "\n COMPILER ERROR in " << filename << ": " << e.what() << "\n\n";
         }
     }
 

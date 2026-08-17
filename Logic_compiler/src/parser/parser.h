@@ -23,7 +23,7 @@ private:
     Token advance() noexcept;
     bool check(t::TokenType type) const noexcept;
     bool match(t::TokenType type) noexcept;
-    Token expect(t::TokenType type, const char* errorMsg);
+    Token expect(t::TokenType type, const char* errorMsg); //expected Token from type, or throw if different
 
     // Diagnostics
     [[noreturn]] void raiseError(const Token& tok, const std::string& msg) const;
@@ -35,10 +35,10 @@ private:
     ast::Qualifiers parseQualifiers() noexcept;
 
     // Recursive Descent Grammar Handlers
-    ast::NodeId parseStatement();
-    ast::NodeId parseVarOrTypeDecl(ast::Qualifiers qual);
-    ast::NodeId parseDeleteStatement();
-    ast::NodeId parseEvalExpression();
+    ast::NodeId parseStatement(); //Parse the generic statement
+    ast::NodeId parseVarOrTypeDecl(ast::Qualifiers qual); //Parse declaration
+    ast::NodeId parseDeleteStatement(); //Parse delete and (delete)
+    ast::NodeId parseEvalExpression(); //Parse eval(){}
     ast::NodeId parseIfStatement();
     ast::NodeId parseWhileStatement();
     ast::NodeId parseForStatement();
@@ -59,6 +59,6 @@ public:
         initWindow();
     }
 
-    // Driver principale
+    // Parse the translation unit, the AST base node
     ast::ASTTree parseTranslationUnit();
 };
