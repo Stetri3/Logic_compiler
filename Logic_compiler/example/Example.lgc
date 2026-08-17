@@ -40,12 +40,12 @@ uint8 a;
 
 //per definire parametri:
 #if false	//In <example>, in qualsiasi punto:
-#param const char* SOMEPARAM = "default value, SEMPRE richiesto, altrimenti non compila";
-#param const char* ANOTHERPARAM = "Notare come la firma sia sempre esplicita";
+#param (const char*) SOMEPARAM = "default value, SEMPRE richiesto, altrimenti non compila";
+#param (const char*) ANOTHERPARAM = "Notare come la firma sia sempre esplicita, e DEVE essere racchiusa da parentesi";
 
 //i parametri funzionano come variabili constexpr, sono valutate nello scope
 namespace n {
-	#param uint64 THIRDPARAM = 0;
+	#param (uint64) THIRDPARAM = 0;
 	THIRDPARAM += 1; //funziona
 }
 THIRDPARAM += 2; //errore, THIRDPARAM non definito, n::THIRDPARAM è il nome corretto

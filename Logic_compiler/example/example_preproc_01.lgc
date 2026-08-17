@@ -1,0 +1,126 @@
+// ============================================================================
+// Logic Language Preprocessor Reference — Part 1: Definitions & Conditionals
+// File: example_preproc_01.lgc
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 1. Basic Single-Line Definitions (#define)
+// ----------------------------------------------------------------------------
+// Simple text substitution. Surrounding whitespace is automatically trimmed.
+#define API_VERSION 2
+#define TARGET_PLATFORM "x86_64"
+
+// ----------------------------------------------------------------------------
+// 2. Chained Multi-Alias Definitions (&)
+// ----------------------------------------------------------------------------
+// IMPORTANT SYNTAX RULE:
+//  - Multi-alias declarations MUST NOT contain spaces around the '&' character.
+//  - Spaces strictly separate the macro identifier from the replacement body.
+//
+//  Correct:   #define BUFFER_LIMIT&MACRO_BUFFER_LIMIT 4096
+//  Incorrect: #define BUFFER_LIMIT & MACRO_BUFFER_LIMIT 4096
+//             (The space after BUFFER_LIMIT makes '& MACRO_...' the value!)
+//
+// Useful when one name will be absorbed by a downstream #param while the
+// alias needs to persist for compile-time #if checks.
+#define BUFFER_LIMIT&MACRO_BUFFER_LIMIT 4096
+
+// ----------------------------------------------------------------------------
+// 3. Multi-Line Continuation Line Macros (__/__)
+// ----------------------------------------------------------------------------
+// Use '__/__' (or '__ / __') at the end of a line to continue macro definitions.
+#define INIT_POINT_3D(pt, x_val, y_val, z_val) __/__
+pt.x = x_val; __ / __
+pt.y = y_val; __ / __
+pt.z = z_val;
+
+// ----------------------------------------------------------------------------
+// 4. Block Macros (#define_m ... #enddef)
+// ----------------------------------------------------------------------------
+// Allows embedding arbitrary blocks of multi-line code without continuation tokens.
+// Also supports contiguous '&' multi-alias definitions.
+#define_m EMIT_BANNER_HEADER & EMIT_AUDIT_LOG
+// --- System Boot Header ---
+const u64 BUILD_TIMESTAMP = 0x64A2F001;
+const char* BUILD_TAG = "STABLE_RELEASE";
+#enddef
+
+// ----------------------------------------------------------------------------
+// 5. Parameter Synthesis (#param)
+// ----------------------------------------------------------------------------
+// #param declares a configurable module-level constant with fallback defaults.
+// Format: #param (Type) Identifier = DefaultValue
+//
+// Behavior:
+//  - If Identifier is NOT #defined: Emits fallback default.
+//  - If Identifier WAS #defined: Absorbs the #define value, removes (forgets)
+//    the macro to avoid polluting the token stream, and emits the overridden value.
+// Emits output syntax: constexpr (Type) Identifier = static_cast<Type>(Value);
+
+// 5a. Fallback Default (No prior #define)
+#param(u32) WORKER_THREADS = 8
+
+// 5b. Overridden Value (BUFFER_LIMIT was defined as 4096 above -> absorbed)
+#param(usize) BUFFER_LIMIT = 1024
+
+// 5c. Complex Template and Function Pointer Signatures
+#param(TypeCheck<4 == 4, i32>) STATIC_ASSERT_FLAG = 0
+#param(fn(i32, i32) -> bool) PREDICATE_CALLBACK = nullptr
+
+// ----------------------------------------------------------------------------
+// 6. Conditional Compilation (#if, #ifndef, #elif, #else, #endif)
+// ----------------------------------------------------------------------------
+// Evaluates truthiness of macros, boolean literals (0/1/true/false), 
+// and binary comparisons (==, !=).
+
+#define FEATURE_NETWORK_LOGS 1
+
+#if FEATURE_NETWORK_LOGS
+#define NET_STATUS "ENABLED"
+#elif API_VERSION == 2
+#define NET_STATUS "LEGACY"
+#else
+#define NET_STATUS "DISABLED"
+#endif
+
+// Guard checking via #ifndef
+#ifndef APP_ENTRY_POINT
+#define APP_ENTRY_POINT main
+#endif
+
+// ----------------------------------------------------------------------------
+// 7. Line Deletion Utility (#skip)
+// ----------------------------------------------------------------------------
+// #skip removes only the single line immediately following it.
+#skip
+int this_debug_var_will_be_removed = 999;
+int this_variable_survives = 100;
+
+// ----------------------------------------------------------------------------
+// 8. Stream Guarding Test
+// ----------------------------------------------------------------------------
+// Directives embedded inside comments or string literals are ignored.
+void guard_verification() {
+    const char* fake_directive = "#define FAKE_MACRO 123";
+    const char* fake_branch = "#endif // Not a real preprocessor boundary";
+}
+
+// ----------------------------------------------------------------------------
+// 9. Output Body & Expansion
+// ----------------------------------------------------------------------------
+struct AppConfig {
+    u32 threads;
+    usize memory;
+    const char* network;
+};
+
+int APP_ENTRY_POINT() {
+    EMIT_BANNER_HEADER
+
+        AppConfig config;
+    config.threads = WORKER_THREADS;
+    config.memory = BUFFER_LIMIT;
+    config.network = NET_STATUS;
+
+    return 0;
+}

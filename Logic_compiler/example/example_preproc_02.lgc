@@ -1,0 +1,55 @@
+// ============================================================================
+// Logic Language Preprocessor Reference — Part 2: Module Inclusion & Composition
+// File: example_preproc_02.lgc
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 1. Pre-Configuring Module Parameters with Aliases (&)
+// ----------------------------------------------------------------------------
+// IMPORTANT SYNTAX RULE:
+//  - Multi-alias declarations MUST NOT contain spaces around the '&' character.
+//  - Spaces strictly separate the macro identifier from the replacement body.
+//
+//  Correct:   #define WORKER_THREADS&SAVED_WORKER_THREADS 64
+//  Incorrect: #define WORKER_THREADS & SAVED_WORKER_THREADS 64
+//             (The space after WORKER_THREADS makes '& SAVED_...' the value!)
+//
+// Behavior:
+//  - WORKER_THREADS is absorbed and erased by '#param (u32) WORKER_THREADS = 8'
+//    inside 'example_preproc_01.lgc'.
+//  - SAVED_WORKER_THREADS persists in the macro symbol table for preprocessor
+//    conditionals (#if / #elif).
+#define WORKER_THREADS&SAVED_WORKER_THREADS 64
+
+// ----------------------------------------------------------------------------
+// 2. Recursive File Inclusion (#include)
+// ----------------------------------------------------------------------------
+// Suspends the current file frame, pushes 'example_preproc_01.lgc' onto the 
+// stack, processes all nested directives, and seamlessly resumes here.
+#include "example_preproc_01.lgc"
+
+// ----------------------------------------------------------------------------
+// 3. Post-Inclusion Validation
+// ----------------------------------------------------------------------------
+// Verify that SAVED_WORKER_THREADS retained its value after WORKER_THREADS was
+// absorbed by the included module's #param system.
+#if SAVED_WORKER_THREADS == 64
+#define CONFIG_CHECK_STATUS "CONFIGURATION_VALID"
+#else
+#define CONFIG_CHECK_STATUS "CONFIGURATION_FAILED"
+#endif
+
+// ----------------------------------------------------------------------------
+// 4. Downstream Composed Consumer
+// ----------------------------------------------------------------------------
+struct ServiceContext {
+    const char* config_state;
+    u32 active_workers;
+};
+
+ServiceContext init_service() {
+    ServiceContext ctx;
+    ctx.config_state = CONFIG_CHECK_STATUS;
+    ctx.active_workers = WORKER_THREADS; // References the constexpr emitted by 01
+    return ctx;
+}

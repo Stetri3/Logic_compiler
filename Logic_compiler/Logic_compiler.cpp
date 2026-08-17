@@ -1,94 +1,36 @@
-﻿#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <iomanip>
-#include "Logic_compiler.h"
-#include "lexer.h"
-#include "parser.h"
-#include "AST_manager.h"
-#include "compiler.h" // Added LLVM Compiler Header
+﻿#include "Logic_compiler.h"
+#include "preprocessor.h"
+#include <iostream>
+#include <chrono>
 
-#define EXAMPLE_PATH  R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
+#define EXAMPLE_PATH R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
 
 int main() {
-    // Definisci fino a quale ex_alpha_XX.lgc vuoi arrivare
-    constexpr int MAX_N = 2;
+    constexpr const char* targetFile = "example_preproc_02.lgc";
 
-    for (int i = 1; i <= MAX_N; ++i) {
-        // Formatta il numero a due cifre (01, 02, etc.)
-        std::ostringstream filenameStream;
-        filenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".lgc";
-        std::string filename = filenameStream.str();
+    try {
+        Preprocessor preprocessor(EXAMPLE_PATH, targetFile, PreprocLogLevel::Trace);
 
-        std::ostringstream binFilenameStream;
-        binFilenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".bin";
-        std::string binFilename = binFilenameStream.str();
+        // Benchmark preprocessor.process() only
+        const auto t0 = std::chrono::high_resolution_clock::now();
 
-        std::ostringstream irFilenameStream;
-        irFilenameStream << "ex_alpha_" << std::setw(2) << std::setfill('0') << i << ".ll";
-        std::string irFilename = irFilenameStream.str();
+        preprocessor.process();
 
-        std::string fullPath = std::string(EXAMPLE_PATH) + "testing/" + filename;
-        std::string fullIrPath = std::string(EXAMPLE_PATH) + "testing/" + irFilename;
+        const auto t1 = std::chrono::high_resolution_clock::now();
 
-        std::cout << "==================================================\n";
-        std::cout << "=== RUNNING PARSER & COMPILER ON " << filename << " ===\n";
-        std::cout << "==================================================\n\n";
+        const std::chrono::duration<double, std::milli> elapsed_ms = t1 - t0;
+        const std::chrono::duration<double, std::micro> elapsed_us = t1 - t0;
+        const std::string_view result = preprocessor.get_result();
 
-        std::ifstream file(fullPath);
-        if (!file.is_open()) {
-            std::cerr << "Impossibile aprire il file: " << fullPath << "\n\n";
-            continue; // Salta al prossimo se il file non esiste
-        }
-
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        std::string sourceCode = buffer.str();
-
-        try {
-            Lexer lexer(sourceCode);
-            Parser parser(lexer, sourceCode);
-
-            // 1. Parsing dell'intero file
-            ast::ASTTree tree = parser.parseTranslationUnit();
-
-            std::cout << " Parsing completato senza errori!\n";
-            std::cout << " Nodi AST Generati: " << tree.nodes.size() << "\n\n";
-
-            // 2. Dump dell'AST
-            std::cout << "=== AST STRUCTURE DUMP FOR " << filename << " ===\n";
-            ast::ASTManager::print(tree, sourceCode);
-
-            // 3. Salvataggio su file binario per la cache
-            if (ast::ASTManager::saveToFile(tree, binFilename)) {
-                std::cout << "\n AST salvato con successo in '" << binFilename << "'\n\n";
-            }
-
-            // 4. Generazione LLVM IR
-            std::cout << "=== GENERATING LLVM IR FOR " << filename << " ===\n\n";
-
-            // Instanzia il compilatore usando il nome del file come ID modulo
-            compiler::Compiler llvmCompiler(tree, sourceCode, filename);
-
-            if (llvmCompiler.compile()) {
-                std::cout << "--- LLVM IR OUTPUT ---\n";
-                llvmCompiler.dumpIR();
-                std::cout << "----------------------\n\n";
-
-                // Salva il file .ll nella stessa cartella dei test
-                if (llvmCompiler.emitIRToFile(fullIrPath)) {
-                    std::cout << " LLVM IR salvato con successo in: " << fullIrPath << "\n\n";
-                }
-            }
-            else {
-                std::cerr << " Errore durante la generazione dell'LLVM IR!\n\n";
-            }
-
-        }
-        catch (const std::exception& e) {
-            std::cerr << "\n COMPILER ERROR in " << filename << ": " << e.what() << "\n\n";
-        }
+        std::cout << "========================================\n"
+            << " Pure Preprocessing Time (Log Off):\n"
+            << "   " << elapsed_ms.count() << " ms (" << elapsed_us.count() << " us)\n"
+            << " Output Size: " << result.size() << " bytes\n"
+            << "========================================\n";
+    }
+    catch (const std::exception& e) {
+        std::cerr << "[ERROR] Preprocessor failed: " << e.what() << '\n';
+        return 1;
     }
 
     return 0;

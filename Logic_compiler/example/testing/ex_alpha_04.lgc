@@ -1,0 +1,41 @@
+// ==========================================
+// ex_alpha_04.lgc - Inclusion & Dual-Define Test
+// ==========================================
+
+// 1. Dual-define: THREAD_COUNT will be absorbed by #param in 03,
+//    while MACRO_THREAD_COUNT persists for preprocessor conditions.
+#define THREAD_COUNT&MACRO_THREAD_COUNT 64
+
+// 2. Dual-define multiline block macro
+#define_m EMIT_COPYRIGHT & EMIT_METADATA
+// (c) 2026 Logic Project
+const u32 BUILD_YEAR = 2026;
+#enddef
+
+// 3. Include ex_alpha_03.lgc
+#include "ex_alpha_03.lgc"
+
+// 4. Downstream Preprocessor Evaluation
+// Test that MACRO_THREAD_COUNT survived #param's absorption of THREAD_COUNT
+#if MACRO_THREAD_COUNT == 64
+#define STATUS_PARAM_PRESERVED "OK"
+#else
+#define STATUS_PARAM_PRESERVED "FAIL"
+#endif
+
+// 5. Code Emission Test
+struct SystemConfig {
+    const char* status;
+    u32 worker_threads;
+    usize memory_limit;
+};
+
+SystemConfig create_config() {
+    EMIT_METADATA
+
+        SystemConfig cfg;
+    cfg.status = STATUS_PARAM_PRESERVED;
+    cfg.worker_threads = THREAD_COUNT;
+    cfg.memory_limit = BUFFER_CAPACITY;
+    return cfg;
+}

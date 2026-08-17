@@ -1,0 +1,87 @@
+// ==========================================
+// ex_alpha_03.lgc - Preprocessor Stress Test
+// ==========================================
+
+// 1. Basic Single-Line Defines
+#define BUFFER_CAPACITY 2048
+#define ENABLE_LOGGING 1
+#define AUTHOR_NAME "AlphaDev"
+
+// 2. Multi-Line Continuation (__/__)
+#define INIT_VEC3(v, x_val, y_val, z_val) __/__
+v.x = x_val; __ / __
+v.y = y_val; __ / __
+v.z = z_val;
+
+// 3. Multi-Line Block Definition (#define_m ... #enddef)
+#define_m EMIT_HEADER_STAMP
+// Generated Header Block
+const u64 TIMESTAMP = 0x5F3759DF;
+const u32 BUILD_ID = 1042;
+#enddef
+
+// 4. #param Directives
+
+// 4a. Default value used (No prior #define for THREAD_COUNT)
+#param(u32) THREAD_COUNT = 8
+
+// 4b. Overridden value (#define BUFFER_CAPACITY 2048 was defined above -> should absorb and emit 2048)
+#param(usize) BUFFER_CAPACITY = 512
+
+// 4c. Complex Type with embedded '<', '>', and '=='
+#param(TypeCheck<2 == 4, i32>) STATIC_CHECK_VAL = 0
+
+// 4d. Function Pointer / Tuple Type with nested parentheses
+#param(fn(i32, i32) -> bool) COMPARE_CALLBACK = nullptr
+
+// 5. Conditional Branching (#if, #elif, #else, #endif)
+#if ENABLE_LOGGING
+#define LOG_LEVEL 3
+#define LOG_TAG "DEBUG"
+#elif BUFFER_CAPACITY
+#define LOG_LEVEL 1
+#define LOG_TAG "FALLBACK"
+#else
+#define LOG_LEVEL 0
+#define LOG_TAG "NONE"
+#endif
+
+// 6. #ifndef Guard & Nesting Test
+#ifndef APP_ENTRY_POINT
+#define APP_ENTRY_POINT main
+#if 0
+    // Dead code that should be completely skipped
+#define DEAD_MACRO 0xDEAD
+    invalid_code_that_should_not_parse();
+#else
+#define ENTRY_DEFINED 1
+#endif
+#endif
+
+// 7. Line Skip Test (#skip removes the line immediately below it)
+#skip
+int this_variable_must_be_deleted = 42;
+int this_variable_must_remain = 100;
+
+// 8. String Literal Guard Test (Directives inside strings must be ignored)
+void string_guard_test() {
+    const char* s1 = "#define FAKE_MACRO 123";
+    const char* s2 = "#endif // Fake endif inside string";
+    char c = '#';
+}
+
+// 9. Expansion & Body Test
+struct AppState {
+    u32 threads;
+    usize cap;
+};
+
+int APP_ENTRY_POINT() {
+    EMIT_HEADER_STAMP
+
+        AppState state;
+    state.threads = THREAD_COUNT;
+    state.cap = BUFFER_CAPACITY;
+
+    return 0;
+}
