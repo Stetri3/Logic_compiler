@@ -10,7 +10,7 @@
 #include "hashing.h"
 #include "file_def.h"
 #include "file_manager.h" 
-#include "Alloc_optimized.h"
+#include "OsVector.h"
 #include "common_def.h"
 
 enum class PreprocLogLevel : uint8_t {
@@ -26,7 +26,7 @@ class Preprocessor {
     FileManager file_mgr;
     FileInfo sourceFile;
     uint64_t out_cursor = 0;
-    OsPagedVector<char> output_buffer;
+    cc::OsPagedVector<char> output_buffer;
     PreprocLogLevel log_level = PreprocLogLevel::Summary; // Default to Summary (1)
 
     struct SourceFrame {

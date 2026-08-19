@@ -2,34 +2,37 @@
 #include "preprocessor.h"
 #include <iostream>
 #include <chrono>
+#include "CAllocators.h"
+#include "CMemory.h"
+#include "CString.h"
+#include "CStringView.h"
+#include "CPrint.h"
+#include "CTime.h"
 
 #define EXAMPLE_PATH R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
 
 int main() {
     constexpr const char* targetFile = "example_preproc_02.lgc";
-
     try {
         Preprocessor preprocessor(EXAMPLE_PATH, targetFile, PreprocLogLevel::Trace);
-
+        
         // Benchmark preprocessor.process() only
-        const auto t0 = std::chrono::high_resolution_clock::now();
+        cc::CTimer timer;
 
         preprocessor.process();
 
-        const auto t1 = std::chrono::high_resolution_clock::now();
+        const cc::CDuration elapsed = timer.elapsed();
+        const auto result = preprocessor.get_result();
 
-        const std::chrono::duration<double, std::milli> elapsed_ms = t1 - t0;
-        const std::chrono::duration<double, std::micro> elapsed_us = t1 - t0;
-        const std::string_view result = preprocessor.get_result();
-
-        std::cout << "========================================\n"
-            << " Pure Preprocessing Time (Log Off):\n"
-            << "   " << elapsed_ms.count() << " ms (" << elapsed_us.count() << " us)\n"
-            << " Output Size: " << result.size() << " bytes\n"
-            << "========================================\n";
+        cc::CCout << "========================================\n"
+                  << " Pure Preprocessing Time (Log Off):\n"
+                  << "   " << elapsed.as_milliseconds() << " ms (" << elapsed.as_microseconds() << " us)\n"
+                  << " Output Size: " << result.size() << " bytes\n"
+                  << "========================================" << cc::endl;
     }
     catch (const std::exception& e) {
-        std::cerr << "[ERROR] Preprocessor failed: " << e.what() << '\n';
+        // Output di errore via CCout (o gestione custom)
+        cc::CCout << "[ERROR] Preprocessor failed: " << e.what() << cc::endl;
         return 1;
     }
 

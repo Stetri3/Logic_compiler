@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string_view>
 #include "token.h"
-#include "Alloc_optimized.h"
+#include "OsVector.h"
 
 namespace ast {
 
@@ -68,7 +68,7 @@ namespace ast {
 
     // Global AST storage container
     struct ASTTree {
-        OsPagedVector<Node> nodes{};
+        cc::OsPagedVector<Node> nodes{};
 
         ASTTree() {
             nodes.reserve(2048);

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <stdexcept>
+#include "builtin_traits.h"
 
 namespace cc { //common types
     //Non owning span
@@ -12,8 +13,8 @@ namespace cc { //common types
         std::size_t size_ = 0;
 
     public:
+
         constexpr CSpan() noexcept = default;
-        constexpr CSpan(const T* ptr, std::size_t size) noexcept : ptr_(ptr), size_(size) {}
         constexpr CSpan(T* ptr, std::size_t size) noexcept : ptr_(ptr), size_(size) {}
 
         template <std::size_t N>
@@ -142,4 +143,5 @@ namespace cc { //common types
     // CTAD for variadic arguments: CArray a{1, 2, 3}; -> CArray<int, 3>
     template <typename First, typename... Rest>
     CArray(First, Rest...) -> CArray<First, 1 + sizeof...(Rest)>;
+
 }

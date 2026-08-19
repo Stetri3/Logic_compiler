@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <cstring>
 #include "typeflags.h"
-#include "Alloc_optimized.h"
+#include "OsVector.h"
 #include "std_types.h"
 
 // file type_def.h (type related definitions)
@@ -205,7 +205,7 @@ namespace typer {
     // --- Arena Bump Allocator ---
     class TypeArena {
     public:
-        OsPagedVector<uint32_t> raw;
+        cc::OsPagedVector<uint32_t> raw;
 
         TypeArena() {
             // Reserve word offset 0 so that arenaOffset == 0 unambiguously means "no payload"
@@ -261,7 +261,7 @@ namespace typer {
 
     // --- Dense Type List (Indexed directly by TypeID) ---
     struct TypeList {
-        OsPagedVector<TypeLean> raw;
+        cc::OsPagedVector<TypeLean> raw;
 
         TypeList() {
             initPrimitives();

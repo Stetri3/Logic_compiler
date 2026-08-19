@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include "file_def.h"
-#include "Alloc_optimized.h"
+#include "OsVector.h"
 #include <string_view>
 
 
@@ -16,7 +16,7 @@ class FileManager {
 	static constexpr std::string_view _EMPTY_SV = std::string_view(_EMPTY);
 
 	const char* src_path = nullptr;
-	OsPagedVector<char> data{};
+	cc::OsPagedVector<char> data{};
 	std::vector<FileInfo> loaded;
 	//file name (path) getter helper
 	std::string_view _getName(FileInfo f) const {

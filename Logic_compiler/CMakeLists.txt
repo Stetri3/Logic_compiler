@@ -64,4 +64,4 @@ target_link_libraries(Logic_compiler PRIVATE
     ntdll.lib
 )
 
-set_property(TARGET Logic_compiler PROPERTY CXX_STANDARD 20)
+set_property(TARGET Logic_compiler PROPERTY CXX_STANDARD 23)

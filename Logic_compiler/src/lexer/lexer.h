@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string_view>
-#include "Alloc_optimized.h"
+#include "OsVector.h"
 #include "token.h"
 
 class Lexer {
@@ -10,7 +10,7 @@ private:
     t::Cursor cursor{ 0 };
 
     // Vector temporaneo per memorizzare i token della riga/espressione corrente
-    OsPagedVector<Token> thisExpr{ 1024 };
+    cc::OsPagedVector<Token> thisExpr{ 1024 };
 
     // Helper per l'ispezione dei caratteri
     [[nodiscard]] constexpr char peek(uint32_t offset = 0) const noexcept {
@@ -57,5 +57,5 @@ public:
     }
 
     // Accessore al buffer interno dell'espressione
-    const OsPagedVector<Token>& getBufferedTokens() const noexcept { return thisExpr; }
+    const cc::OsPagedVector<Token>& getBufferedTokens() const noexcept { return thisExpr; }
 };
