@@ -2,6 +2,7 @@
 #include <cstdint>
 #include "common_def.h"
 #include "hashing.h"
+#include <array>
 
 // passive token relative definitions
 namespace t {

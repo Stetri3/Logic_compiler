@@ -21,6 +21,13 @@ file(GLOB_RECURSE SRC_FILES
     "src/*.h"
 )
 
+
+# Add the cc library directly from source
+add_subdirectory(
+    "C:/Users/stefa/DEV/C/Trinca_common/TrincaC"
+    "${CMAKE_CURRENT_BINARY_DIR}/TrincaC_build"
+)
+
 # 2. Aggiungi l'eseguibile del progetto
 add_executable (Logic_compiler "Logic_compiler.cpp" "Logic_compiler.h"
     ${SRC_FILES}
@@ -55,6 +62,7 @@ target_include_directories(Logic_compiler SYSTEM PRIVATE "${LOCAL_LLVM_DIR}/incl
 file(GLOB LOCAL_LLVM_LIBS "${LOCAL_LLVM_DIR}/lib/LLVM*.lib")
 
 target_link_libraries(Logic_compiler PRIVATE
+    Trinca_common
     ${LOCAL_LLVM_LIBS}
     version.lib
     dbghelp.lib

@@ -1,13 +1,13 @@
 ﻿#include "Logic_compiler.h"
 #include "preprocessor.h"
-#include <iostream>
-#include <chrono>
 #include "CAllocators.h"
 #include "CMemory.h"
 #include "CString.h"
 #include "CStringView.h"
 #include "CPrint.h"
 #include "CTime.h"
+#include "CVectors.h"
+#include "CFilestream.h"
 
 #define EXAMPLE_PATH R"(C:/Users/stefa/DEV/C/Logic_compiler/Logic_compiler/example/)"
 

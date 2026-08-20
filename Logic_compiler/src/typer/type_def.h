@@ -3,7 +3,7 @@
 #include <cstring>
 #include "typeflags.h"
 #include "OsVector.h"
-#include "std_types.h"
+#include "CArrays.h"
 
 // file type_def.h (type related definitions)
 namespace typer {
